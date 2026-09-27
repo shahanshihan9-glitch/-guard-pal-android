@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guard Pal — a tiny guardian that checks files and links</title>
+<meta name="description" content="Guard Pal is a tiny guardian pet that checks files and links for danger signs, only when you ask. Everything stays on your device. Free.">
+<meta name="theme-color" content="#CFE3FF">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Guard Pal">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Guard Pal — your tiny guardian">
+<meta property="og:description" content="A cute guardian pet that checks files and links for danger signs, only with your permission. Nothing leaves your device.">
+<meta property="og:image" content="og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky1:#CFE3FF; --sky2:#EAF3FF; --sky3:#DDF7F1;
+  --ink:#14213D; --ink-soft:rgba(20,33,61,.62);
+  --glass:rgba(255,255,255,.62); --line:rgba(255,255,255,.85);
+  --shield1:#6FB6FF; --shield2:#2F6BFF; --visor:#14213D; --eye:#7FF6FF;
+  --safe:#1FA971; --warn:#E8961E; --danger:#E5445F;
+  --shadow:0 16px 36px -14px rgba(20,33,61,.35);
+  --font:"Fredoka",ui-rounded,"SF Pro Rounded","Segoe UI",system-ui,-apple-system,sans-serif;
+  box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);color:var(--ink);background:linear-gradient(170deg,var(--sky1),var(--sky2) 55%,var(--sky3));
+     overflow:hidden;-webkit-font-smoothing:antialiased}
+body.alert{--sky1:#FFD9DF;--sky2:#FFF1F3;--sky3:#FFE6D6;--shield1:#FF9AA8;--shield2:#E0314F;--eye:#FFE3E8}
+body.alert .pet ellipse[fill="#2A5BD7"]{fill:#B8233D}
+body.alert .pet line{stroke:#FF7A8C}
+body{transition:background .6s}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--shield2);outline-offset:2px}
+.hidden{display:none!important}
+
+.app{position:fixed;inset:0;display:flex;flex-direction:column;
+     padding:max(14px,env(safe-area-inset-top)) 14px max(14px,env(safe-area-inset-bottom))}
+.card{background:var(--glass);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);
+      backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6)}
+
+/* top */
+.top{display:flex;gap:8px;align-items:stretch}
+.ident{padding:10px 14px;flex:1;min-width:0}
+.ident h1{margin:0;font-size:19px;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ident small{display:block;font-size:12.5px;color:var(--ink-soft);font-weight:500;margin-top:2px}
+.status{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;border-radius:99px;font-size:12.5px;font-weight:600;
+        background:rgba(31,169,113,.14);color:var(--safe)}
+.status::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.status.warn{background:rgba(232,150,30,.16);color:#B96E08}
+.status.danger{background:rgba(229,68,95,.15);color:var(--danger)}
+.tb{display:grid;grid-template-columns:repeat(2,44px);gap:6px;align-content:start}
+.ibtn{width:44px;height:44px;display:grid;place-items:center;border-radius:15px;font-size:19px;padding:0;border:1px solid var(--line)}
+.ibtn.on{box-shadow:0 0 0 3px var(--shield2),var(--shadow)}
+
+/* stage */
+.stage{flex:1;position:relative;display:grid;place-items:center;min-height:0}
+.pet{position:relative;width:min(220px,52vw);aspect-ratio:200/220;cursor:pointer;border:0;background:none;padding:0}
+.pet svg{width:100%;height:100%;overflow:visible;display:block}
+.bob{animation:bob 3.2s ease-in-out infinite;transform-origin:100px 190px}
+@keyframes bob{50%{transform:translateY(-6px)}}
+.eye{fill:var(--eye);transform-box:fill-box;transform-origin:center;animation:blink 5s infinite}
+@keyframes blink{0%,95%,100%{transform:scaleY(1)}97%{transform:scaleY(.1)}}
+.eyes-happy{display:none}
+.pet.happy .eyes{display:none}.pet.happy .eyes-happy{display:inline}
+.pet.alert{--eye:#FF7A8C}
+.pet.alert .bob{animation:shake .5s ease-in-out 3,bob 3.2s ease-in-out infinite .6s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.pet.scanning .eyes{animation:look 1.2s ease-in-out infinite}
+@keyframes look{0%,100%{transform:translateX(-7px)}50%{transform:translateX(7px)}}
+.pet.sleepy .eye{transform:scaleY(.25);animation:none}
+.beacon{fill:var(--eye)}
+.pet.scanning .beacon{animation:beacon .6s infinite alternate}
+@keyframes beacon{to{fill:#fff}}
+/* the signature: radar rings that ripple out while scanning */
+.radar{position:absolute;left:50%;top:48%;width:min(260px,62vw);aspect-ratio:1;translate:-50% -50%;pointer-events:none;opacity:0;transition:opacity .4s}
+.radar.on{opacity:1}
+.radar i{position:absolute;inset:0;border-radius:50%;border:2px solid var(--shield2);opacity:0;animation:ring 2.4s ease-out infinite}
+.radar i:nth-child(2){animation-delay:.8s}.radar i:nth-child(3){animation-delay:1.6s}
+.radar b{position:absolute;inset:0;border-radius:50%;
+         background:conic-gradient(from 0deg,rgba(47,107,255,.28),rgba(47,107,255,0) 70deg,transparent);animation:sweep 1.6s linear infinite}
+@keyframes ring{from{transform:scale(.45);opacity:.7}to{transform:scale(1.25);opacity:0}}
+@keyframes sweep{to{transform:rotate(1turn)}}
+.bubble{position:absolute;left:50%;top:6%;translate:-50% 0;max-width:min(320px,86vw);padding:12px 16px;border-radius:18px;
+        font-size:16px;font-weight:500;line-height:1.35;text-align:center;opacity:0;transform:translateY(6px);transition:.25s;pointer-events:none}
+.bubble.show{opacity:1;transform:none}
+.progress{position:absolute;left:50%;bottom:4%;translate:-50% 0;width:min(320px,84vw);padding:10px 14px;border-radius:16px;font-size:14px;font-weight:500}
+.progress .bar{height:8px;border-radius:9px;background:rgba(20,33,61,.12);margin-top:7px;overflow:hidden}
+.progress .bar i{display:block;height:100%;width:0;background:var(--shield2);border-radius:9px;transition:width .2s}
+
+/* dock */
+.log{display:flex;flex-direction:column;gap:6px;max-height:26vh;overflow-y:auto;padding:2px 2px 8px;scroll-behavior:smooth}
+.msg{max-width:82%;padding:9px 13px;border-radius:18px;font-size:15px;line-height:1.35;animation:pop .2s ease-out;word-wrap:break-word}
+.msg.me{align-self:flex-end;background:var(--ink);color:#fff;border-bottom-right-radius:6px}
+.msg.pal{align-self:flex-start;background:rgba(255,255,255,.88);border-bottom-left-radius:6px;box-shadow:0 4px 14px -8px rgba(20,33,61,.35)}
+body.alert .msg.me{background:var(--danger)}
+@keyframes pop{from{transform:translateY(6px);opacity:0}}
+.chat{display:flex;gap:6px;padding:6px;margin:0 0 8px;border-radius:18px}
+.chat input{flex:1;min-width:0;height:46px;border:0;border-radius:14px;background:rgba(255,255,255,.75);padding:0 14px;font-size:16px}
+.chat button{width:46px;height:46px;border:0;border-radius:14px;background:var(--ink);color:#fff;font-size:18px}
+body.alert .chat button{background:var(--danger)}
+.dock{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px}
+.dbtn{border:0;background:rgba(255,255,255,.5);border-radius:17px;padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;
+      font-size:13px;font-weight:600}
+.dbtn span{font-size:24px;line-height:1}
+.dbtn.main{background:var(--ink);color:#fff}
+.dbtn:active{transform:scale(.95)}
+
+/* sheets & veils */
+.veil{position:fixed;inset:0;z-index:30;display:grid;place-items:end center;padding:12px;background:rgba(20,33,61,.32);
+      backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+@media(min-width:700px){.veil{place-items:center}}
+.sheet{width:min(560px,100%);max-height:calc(100% - 20px);overflow:auto;padding:20px 18px calc(18px + env(safe-area-inset-bottom));
+       background:rgba(255,255,255,.92);border-radius:26px}
+.sheet h2{margin:0 0 6px;font-size:22px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sheet h3{margin:18px 0 6px;font-size:17px}
+.sheet p{margin:0 0 12px;font-size:15px;line-height:1.5;color:var(--ink-soft)}
+.x{border:0;background:rgba(20,33,61,.07);border-radius:12px;width:40px;height:40px;font-size:18px;flex:none}
+.go{width:100%;min-height:52px;border:0;border-radius:16px;background:var(--ink);color:#fff;font-size:17px;font-weight:600;margin-top:8px}
+.go.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 2px rgba(20,33,61,.15)}
+.go.bye{background:var(--danger)}
+.promise{list-style:none;padding:0;margin:4px 0 12px;display:grid;gap:8px}
+.promise li{display:flex;gap:10px;align-items:flex-start;font-size:15px;line-height:1.4}
+.promise li span{font-size:20px;line-height:1.1}
+.hatch{text-align:center}
+.hatch input{width:100%;height:54px;border:2px solid rgba(20,33,61,.12);border-radius:16px;background:#fff;text-align:center;font-size:19px;font-weight:600;margin:4px 0}
+.note{font-size:13px!important;margin-top:10px!important}
+
+/* results */
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 12px}
+.summary div{border-radius:16px;padding:10px;text-align:center;background:rgba(20,33,61,.05)}
+.summary b{display:block;font-size:24px}
+.summary .d b{color:var(--danger)}.summary .w b{color:#B96E08}.summary .s b{color:var(--safe)}
+.item{border-radius:16px;padding:12px 14px;margin-bottom:8px;background:rgba(20,33,61,.04);border-left:6px solid var(--safe)}
+.item.warn{border-left-color:var(--warn);background:rgba(232,150,30,.08)}
+.item.danger{border-left-color:var(--danger);background:rgba(229,68,95,.08)}
+.item .nm{font-weight:600;font-size:15.5px;word-break:break-all}
+.item .path{font-size:12.5px;color:var(--ink-soft);word-break:break-all}
+.item .tag{display:inline-block;font-size:12.5px;font-weight:600;border-radius:99px;padding:2px 9px;margin:6px 0 4px;background:rgba(31,169,113,.14);color:var(--safe)}
+.item.warn .tag{background:rgba(232,150,30,.18);color:#9A5A00}
+.item.danger .tag{background:rgba(229,68,95,.16);color:var(--danger)}
+.item ul{margin:4px 0 6px;padding-left:18px;font-size:14px;line-height:1.45}
+.item .todo{font-size:14px;font-weight:600}
+.item .hash{font-size:12px;color:var(--ink-soft);margin-top:6px;word-break:break-all}
+.item a{color:var(--shield2);font-weight:600}
+details.safe summary{cursor:pointer;font-weight:600;padding:8px 0}
+.urlin{width:100%;height:54px;border:2px solid rgba(20,33,61,.12);border-radius:16px;background:#fff;padding:0 14px;font-size:16px}
+.apstep{font-size:13px;font-weight:600;color:var(--ink-soft);margin-bottom:4px}
+.apdots{display:flex;gap:5px;margin:0 0 12px}.apdots i{flex:1;height:5px;border-radius:5px;background:rgba(20,33,61,.12)}
+.apdots i.done{background:var(--shield2)}.apdots i.bad{background:var(--danger)}.apdots i.meh{background:var(--warn)}
+.where{background:rgba(20,33,61,.06);border-radius:14px;padding:10px 12px;font-size:15px;font-weight:600;line-height:1.5;margin:0 0 10px}
+.where small{display:block;font-weight:500;color:var(--ink-soft);font-size:13px;margin-top:4px}
+.ans{display:grid;gap:8px;margin-top:6px}
+.ans button{min-height:52px;border:0;border-radius:16px;font-size:16px;font-weight:600;text-align:left;padding:0 16px}
+.ans .ok{background:rgba(31,169,113,.14);color:#0E7A50}.ans .bad{background:rgba(229,68,95,.13);color:#B42340}.ans .idk{background:rgba(20,33,61,.07)}
+.fix{border-left:5px solid var(--danger);background:rgba(229,68,95,.07);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:14.5px;line-height:1.5}
+.hist{border-radius:14px;padding:10px 12px;background:rgba(20,33,61,.04);margin-bottom:8px;font-size:14.5px}
+.hist small{display:block;color:var(--ink-soft)}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 0;font-weight:600}
+.toggle input{width:24px;height:24px;accent-color:var(--shield2)}
+.steps{margin:4px 0 8px;padding-left:20px;font-size:14.5px;line-height:1.6}
+.toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top));translate:-50% -20px;opacity:0;pointer-events:none;z-index:60;
+       background:var(--ink);color:#fff;padding:12px 18px;border-radius:14px;font-weight:600;transition:.2s;max-width:90%;text-align:center}
+.toast.show{opacity:1;translate:-50% 0}
+@media(max-width:380px){.dbtn{font-size:12px}.dbtn span{font-size:21px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="card ident">
+      <h1 id="nm">Byte</h1>
+      <small id="lvl">Guardian level 1</small>
+      <span class="status" id="status">Ready</span>
+    </div>
+    <div class="tb">
+      <button class="card ibtn hidden" id="bGet" aria-label="Install Guard Pal">⬇️</button>
+      <button class="card ibtn hidden" id="bCorner" aria-label="Live in the corner">📌</button>
+      <button class="card ibtn" id="bGear" aria-label="Settings">⚙️</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="radar" id="radar"><b></b><i></i><i></i><i></i></div>
+    <button class="pet" id="pet" aria-label="Your guardian. Tap for a safety tip.">
+      <svg viewBox="0 0 200 220" aria-hidden="true">
+        <defs>
+          <linearGradient id="gb" x1="0" y1="0" x2=".3" y2="1"><stop offset="0" style="stop-color:var(--shield1);transition:stop-color .6s"/><stop offset="1" style="stop-color:var(--shield2);transition:stop-color .6s"/></linearGradient>
+          <linearGradient id="gv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1D2D52"/><stop offset="1" stop-color="#0F1A33"/></linearGradient>
+        </defs>
+        <ellipse cx="100" cy="208" rx="50" ry="8" fill="rgba(20,33,61,.16)"/>
+        <g class="bob">
+          <ellipse cx="78" cy="193" rx="15" ry="9" fill="#2A5BD7"/>
+          <ellipse cx="122" cy="193" rx="15" ry="9" fill="#2A5BD7"/>
+          <line x1="100" y1="30" x2="100" y2="13" stroke="#5B8CFF" stroke-width="5" stroke-linecap="round"/>
+          <circle class="beacon" cx="100" cy="10" r="7"/>
+          <path d="M100 26C132 26 158 36 168 46C171 112 150 160 100 190C50 160 29 112 32 46C42 36 68 26 100 26Z" fill="url(#gb)"/>
+          <path d="M100 36C126 36 148 44 157 52C157 70 154 86 148 100C120 70 80 60 44 56C44 54 43 53 43 52C52 44 74 36 100 36Z" fill="rgba(255,255,255,.22)"/>
+          <rect x="50" y="72" width="100" height="46" rx="23" fill="url(#gv)"/>
+          <g class="eyes"><ellipse class="eye" cx="79" cy="95" rx="9" ry="11"/><ellipse class="eye" cx="121" cy="95" rx="9" ry="11"/></g>
+          <g class="eyes-happy" fill="none" stroke="var(--eye)" stroke-width="5" stroke-linecap="round">
+            <path d="M70 99q9-13 18 0"/><path d="M112 99q9-13 18 0"/></g>
+          <ellipse cx="62" cy="134" rx="10" ry="6" fill="rgba(255,150,190,.55)"/>
+          <ellipse cx="138" cy="134" rx="10" ry="6" fill="rgba(255,150,190,.55)"/>
+          <path id="mouth" d="M88 136q12 10 24 0" fill="none" stroke="#14213D" stroke-width="4.5" stroke-linecap="round"/>
+        </g>
+      </svg>
+    </button>
+    <div class="card bubble" id="bubble" role="status" aria-live="polite"></div>
+    <div class="card progress hidden" id="progress"><span id="progText">Checking…</span><div class="bar"><i id="progBar"></i></div></div>
+  </div>
+
+  <div class="log hidden" id="log" aria-live="polite"></div>
+  <div class="card chat" id="chatForm">
+    <input id="chatIn" enterkeyhint="send" autocomplete="off" placeholder="Tell Byte anything…" aria-label="Message your guardian" maxlength="400">
+    <button type="button" id="chatSend" aria-label="Send">➤</button>
+  </div>
+  <nav class="card dock" aria-label="Actions">
+    <button class="dbtn main" id="dScan"><span>🛡️</span><b id="dScanL" style="font-weight:600">Scan all</b></button>
+    <button class="dbtn" id="dFolder"><span>📄</span>Pick files</button>
+    <button class="dbtn" id="dLink"><span>🔗</span>Check link</button>
+    <button class="dbtn hidden" id="dApps"><span>📱</span>Apps</button>
+    <button class="dbtn" id="dHist"><span>📋</span>History</button>
+  </nav>
+</div>
+
+<input type="file" id="fileIn" multiple hidden>
+<input type="file" id="folderIn" webkitdirectory multiple hidden>
+
+<!-- hatch -->
+<div class="veil" id="vHatch">
+  <div class="sheet hatch">
+    <div style="font-size:56px;line-height:1">🛡️</div>
+    <h2 style="justify-content:center">A guardian just hatched</h2>
+    <p>It's small, it's brave, and it wants to keep your files and links safe. What should we call it?</p>
+    <input id="nameIn" maxlength="14" placeholder="Byte" autocomplete="off">
+    <button class="go" id="hatchGo">That's the one</button>
+    <p class="note">Your guardian is a helper, not a full antivirus. Keep your device's built-in protection switched on too.</p>
+  </div>
+</div>
+
+<!-- scan permission -->
+<div class="veil hidden" id="vAsk" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+  <div class="sheet">
+    <h2 id="askTitle">Can I check all your files?</h2>
+    <ul class="promise" id="askList"></ul>
+    <div id="askFolders"></div>
+    <button class="go" id="askYes">Yes, check all my files</button>
+    <button class="go ghost hidden" id="askAdd">Add another folder</button>
+    <button class="go ghost" id="askNo">Not now</button>
+  </div>
+</div>
+
+<!-- confirm exact files -->
+<div class="veil hidden" id="vConfirm" role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+  <div class="sheet">
+    <h2 id="cfTitle">Check these files?</h2>
+    <p id="cfText"></p>
+    <div id="cfList" style="max-height:38vh;overflow:auto;margin-bottom:6px"></div>
+    <button class="go" id="cfYes">Yes, check them</button>
+    <button class="go ghost" id="cfNo">Cancel, don't look</button>
+  </div>
+</div>
+
+<!-- results -->
+<div class="veil hidden" id="vRes"><div class="sheet" id="resBody"></div></div>
+
+<!-- link check -->
+<div class="veil hidden" id="vLink">
+  <div class="sheet">
+    <h2>Check a link <button class="x" data-close aria-label="Close">✕</button></h2>
+    <p>Paste a link from a message or email. I'll look for tricks scammers use. The link is checked on this device and never opened.</p>
+    <input class="urlin" id="urlIn" type="url" inputmode="url" placeholder="https://…" autocomplete="off" spellcheck="false">
+    <button class="go" id="urlGo">Check it</button>
+    <div id="urlRes" style="margin-top:14px"></div>
+  </div>
+</div>
+
+<!-- apps check-up -->
+<div class="veil hidden" id="vApps" role="dialog" aria-modal="true" aria-labelledby="apTitle">
+  <div class="sheet" id="apBody"></div>
+</div>
+
+<!-- history -->
+<div class="veil hidden" id="vHist"><div class="sheet" id="histBody"></div></div>
+
+<!-- corner ask -->
+<div class="veil hidden" id="vCorner">
+  <div class="sheet hatch">
+    <div style="font-size:52px;line-height:1">📌</div>
+    <h2 style="justify-content:center" id="cTitle">Can I stand guard in your corner?</h2>
+    <p id="cText"></p>
+    <button class="go" id="cYes">Yes, stand guard</button>
+    <button class="go ghost" id="cNo">Not now</button>
+    <p class="note">Close my little window anytime to bring me back. Works on Android (Chrome) and iPhone/iPad (Safari).</p>
+  </div>
+</div>
+
+<!-- settings -->
+<div class="veil hidden" id="vSet">
+  <div class="sheet">
+    <h2>Settings <button class="x" data-close aria-label="Close">✕</button></h2>
+    <h3>🔒 Permission</h3>
+    <p>I always ask before every scan, and I show you the exact files before I read them. This can't be switched off.</p>
+    <div id="gfBox" class="hidden">
+      <h3>📂 Folders I may check</h3>
+      <p>These are the folders you allowed. I still ask every time before scanning them.</p>
+      <div id="gfList"></div>
+      <button class="go ghost" id="gfAdd">Add a folder</button>
+    </div>
+    <div id="rtBox" class="hidden">
+      <h3>🛡️ Real-time protection</h3>
+      <p>Byte checks every new app the moment it's installed and re-checks all apps every few hours. Android shows a small "Byte is on guard" notification while it's on.</p>
+      <label class="toggle"><span>Protect my phone all the time</span><input type="checkbox" id="setRT"></label>
+    </div>
+    <h3>📌 Corner mode</h3>
+    <p id="cornerNote">Let your guardian float in a small window on top of your other apps. Close its window anytime to bring it home.</p>
+    <label class="toggle" id="cornerRow"><span>Allow my guardian in the corner</span><input type="checkbox" id="setCorner"></label>
+    <button class="go ghost" id="cornerGo">Send to the corner</button>
+    <h3>📲 Install on your phone</h3>
+    <div id="instBox"></div>
+    <h3>ℹ️ What I can and can't do</h3>
+    <p>I check the files and links you give me for danger signs: disguised programs, fake file names, hidden macros, sneaky script commands, risky links and look-alike websites. I also know the standard antivirus test file.</p>
+    <p>I can't see your other apps, scan your whole phone by myself, or catch every virus. I'm a friendly second opinion. Keep your device's built-in protection on: <b>Google Play Protect</b> on Android, <b>Windows Security</b> on PCs, and keep iPhones updated.</p>
+    <h3>👋 Say goodbye</h3>
+    <p>Remove your guardian and its history from this device. To remove the app, delete it from your home screen like any app.</p>
+    <button class="go bye" id="byeGo">Say goodbye</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const NATIVE=!!(window.GuardNative&&window.GuardNative.isNative&&window.GuardNative.isNative());
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ---------- state ---------- */
+const KEY="guardpal.v1";
+const fresh=()=>({name:"",born:0,xp:0,files:0,threats:0,warns:0,links:0,scans:0,lastScan:0,lastResult:"none",
+  askEachTime:true,corner:"",history:[],tip:0});
+let S=fresh();
+function load(){ try{ const v=localStorage.getItem(KEY); if(v) return Object.assign(fresh(),JSON.parse(v)); }catch(e){} return null; }
+let saveT=null;
+function saveNow(){ if(window.__bye) return; try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+function save(){ clearTimeout(saveT); saveT=setTimeout(saveNow,300); }
+addEventListener("pagehide",saveNow);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") saveNow(); });
+
+/* ---------- speech & mood ---------- */
+const lastLine={t:"",at:0,hold:0};
+let logging=false;
+function addMsg(who,text){
+  const L=$("log"); L.classList.remove("hidden");
+  const d=document.createElement("div"); d.className="msg "+who; d.textContent=text; L.appendChild(d);
+  while(L.children.length>30) L.removeChild(L.firstChild);
+  L.scrollTop=L.scrollHeight;
+}
+let bubT=null;
+function say(t,hold=4200){
+  if(logging) addMsg("pal",t);
+  lastLine.t=t; lastLine.at=Date.now(); lastLine.hold=hold;
+  if(logging) return;
+  const b=$("bubble"); b.textContent=t; b.classList.add("show");
+  clearTimeout(bubT); bubT=setTimeout(()=>b.classList.remove("show"),hold);
+}
+let redAlert=false;
+function setMood(m){ const p=$("pet"); p.classList.remove("happy","alert","scanning","sleepy"); if(m) p.classList.add(m);
+  if(redAlert && m!=="alert") p.classList.add("alert");
+  document.body.classList.toggle("alert",m==="alert"||redAlert);
+  $("mouth").setAttribute("d", (m==="alert"||redAlert)?"M88 142q12-10 24 0": m==="happy"?"M86 134q14 14 28 0":"M88 136q12 10 24 0"); }
+function endRedAlert(){ if(!redAlert) return; redAlert=false; }
+let toastT=null;
+function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"),2600); }
+function ago(ts){ if(!ts) return "never"; const s=(Date.now()-ts)/1000;
+  if(s<60) return "just now"; if(s<3600) return Math.round(s/60)+" min ago"; if(s<86400) return Math.round(s/3600)+" h ago"; return Math.round(s/86400)+" days ago"; }
+const level=()=>1+Math.floor(Math.sqrt(S.xp/40));
+function statusInfo(){
+  if(S.lastResult==="danger") return ["danger","Threat found"];
+  if(!S.lastScan) return ["warn","No check yet"];
+  if(Date.now()-S.lastScan>7*864e5) return ["warn","Time for a check-up"];
+  if(S.lastResult==="warn") return ["warn","Checked, be careful"];
+  return ["","Looking good"];
+}
+function draw(){
+  $("nm").textContent=S.name||"Byte";
+  $("chatIn").placeholder="Tell "+(S.name||"Byte")+" anything…";
+  $("lvl").textContent="Guardian level "+level()+" · last check "+ago(S.lastScan)+(NATIVE&&GuardNative.guardOn()?" · 🛡️ live":"");
+  const [cls,txt]=statusInfo(); const st=$("status"); st.className="status "+cls; st.textContent=txt;
+  syncCornerBtn(); syncGetBtn();
+}
+
+/* ---------- tips ---------- */
+const TIPS=[
+ "never open a file that ends in .exe, .scr or .apk unless you were expecting it.",
+ "\"invoice.pdf.exe\" is a program pretending to be a PDF. the LAST dot is what counts.",
+ "banks never ask for your password or OTP by message. never share them.",
+ "if a message says \"urgent\" and has a link, slow down and check the link with me first.",
+ "keep your phone and apps updated. updates fix security holes.",
+ "only install apps from the Play Store or App Store, not from links.",
+ "a Word or Excel file that asks you to \"enable content\" may be hiding a macro. don't click it.",
+ "zip files with a password inside an email are a favourite trick to sneak past scanners.",
+ "turn on two-step verification for email, WhatsApp and banking.",
+ "look-alike links swap letters: paypa1.com, g00gle.com, rnicrosoft.com. read carefully!"
+];
+function tip(){ S.tip=(S.tip+1)%TIPS.length; save(); say("tip: "+TIPS[S.tip],7000); }
+
+/* ---------- scanner (all local) ---------- */
+const RISKY={exe:"a Windows program",scr:"a Windows screensaver (it can run code)",com:"a Windows program",pif:"an old Windows program shortcut",
+ bat:"a Windows batch script",cmd:"a Windows command script",msi:"a Windows installer",vbs:"a VBScript",vbe:"an encoded VBScript",
+ js:"a script file (it can run on Windows)",jse:"an encoded script",wsf:"a Windows script",hta:"an HTML application (it can run code)",
+ ps1:"a PowerShell script",lnk:"a Windows shortcut (can launch commands)",jar:"a Java program",apk:"an Android app",xapk:"an Android app",
+ apks:"an Android app bundle",iso:"a disk image (often used to hide programs)",img:"a disk image",vhd:"a virtual disk",dmg:"a Mac disk image",
+ pkg:"a Mac installer",sh:"a shell script",reg:"a Windows registry change",dll:"a Windows program library",cpl:"a Control Panel program",
+ msc:"a Windows console file",scf:"a Windows shell command file",chm:"a compiled help file (can run code)",appx:"a Windows app package",msix:"a Windows app package"};
+const LOOKS_SAFE=/^(pdf|docx?|xlsx?|pptx?|txt|rtf|csv|jpe?g|png|gif|webp|heic|bmp|mp3|mp4|mov|m4a|wav|zip)$/i;
+const MACRO_EXT=/^(docm|xlsm|pptm|dotm|xltm|xlam|ppam)$/i;
+const EICAR="X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+const KNOWN_BAD={"275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f":"the standard antivirus test file (EICAR)"};
+const SCRIPT_SIGNS=[
+ [/powershell[^\n]{0,80}-(e|en|enc|encodedcommand)\s/i,"runs a hidden, encoded PowerShell command"],
+ [/\b(iex|invoke-expression)\b/i,"runs code it downloads or builds on the fly"],
+ [/downloadstring|downloadfile|invoke-webrequest|net\.webclient/i,"downloads more files from the internet"],
+ [/frombase64string/i,"decodes hidden (Base64) content"],
+ [/wscript\.shell|shell\.application/i,"can run programs on the computer"],
+ [/certutil[^\n]{0,40}-(decode|urlcache)/i,"misuses a Windows tool to download or decode files"],
+ [/\bmshta\b|\bregsvr32\b[^\n]{0,40}\/i:|\brundll32\b/i,"misuses a built-in Windows tool to run code"],
+ [/eval\s*\(\s*(atob|unescape|decodeURIComponent)\s*\(/i,"runs hidden, scrambled code"],
+ [/document\.write\s*\(\s*unescape\s*\(/i,"writes hidden, scrambled code into a page"],
+ [/vssadmin[^\n]{0,30}delete\s+shadows/i,"deletes backup copies (a ransomware trick)"],
+ [/bcdedit[^\n]{0,40}recoveryenabled\s+no/i,"turns off Windows recovery (a ransomware trick)"],
+ [/curl[^\n]{0,120}\|\s*(ba)?sh\b|wget[^\n]{0,120}\|\s*(ba)?sh\b/i,"downloads a script and runs it straight away"]
+];
+function extOf(n){ const m=/\.([a-z0-9]{1,6})$/i.exec(n.trim()); return m?m[1].toLowerCase():""; }
+function magicOf(b){
+  const h=(i)=>b[i];
+  if(h(0)===0x4D&&h(1)===0x5A) return "exe";
+  if(h(0)===0x7F&&h(1)===0x45&&h(2)===0x4C&&h(3)===0x46) return "elf";
+  const u=((h(0)<<24)|(h(1)<<16)|(h(2)<<8)|h(3))>>>0;
+  if([0xFEEDFACE,0xFEEDFACF,0xCEFAEDFE,0xCFFAEDFE].includes(u)) return "macho";
+  if(u===0xCAFEBABE) return "java";
+  if(h(0)===0x50&&h(1)===0x4B&&h(2)===3&&h(3)===4) return "zip";
+  if(h(0)===0x25&&h(1)===0x50&&h(2)===0x44&&h(3)===0x46) return "pdf";
+  if(h(0)===0xD0&&h(1)===0xCF&&h(2)===0x11&&h(3)===0xE0) return "ole";
+  if(h(0)===0x4C&&h(1)===0&&h(2)===0&&h(3)===0&&h(4)===1&&h(5)===0x14) return "lnk";
+  if(h(0)===0x23&&h(1)===0x21) return "script";
+  if(h(0)===0x52&&h(1)===0x61&&h(2)===0x72&&h(3)===0x21) return "rar";
+  if(h(0)===0x37&&h(1)===0x7A&&h(2)===0xBC&&h(3)===0xAF) return "7z";
+  if(h(0)===0xFF&&h(1)===0xD8) return "jpg";
+  if(h(0)===0x89&&h(1)===0x50&&h(2)===0x4E&&h(3)===0x47) return "png";
+  if(h(0)===0x47&&h(1)===0x49&&h(2)===0x46) return "gif";
+  return "";
+}
+async function sha256(file){
+  if(!crypto.subtle||file.size>150*1024*1024) return "";
+  try{ const d=await crypto.subtle.digest("SHA-256",await file.arrayBuffer());
+    return [...new Uint8Array(d)].map(x=>x.toString(16).padStart(2,"0")).join(""); }catch(e){ return ""; }
+}
+async function zipNames(file){
+  // read the zip's table of contents from the end of the file
+  try{
+    const tailLen=Math.min(file.size,66000);
+    const tail=new Uint8Array(await file.slice(file.size-tailLen).arrayBuffer());
+    const dv=new DataView(tail.buffer);
+    let eo=-1; for(let i=tail.length-22;i>=0;i--){ if(dv.getUint32(i,true)===0x06054b50){ eo=i; break; } }
+    if(eo<0) return null;
+    const cdSize=dv.getUint32(eo+12,true), cdOff=dv.getUint32(eo+16,true);
+    if(cdSize>20*1024*1024) return null;
+    const cd=new Uint8Array(await file.slice(cdOff,cdOff+cdSize).arrayBuffer()); const cv=new DataView(cd.buffer);
+    const out=[]; let p=0; const dec=new TextDecoder();
+    while(p+46<=cd.length && cv.getUint32(p,true)===0x02014b50 && out.length<5000){
+      const flags=cv.getUint16(p+8,true), nl=cv.getUint16(p+28,true), xl=cv.getUint16(p+30,true), cl=cv.getUint16(p+32,true);
+      out.push({name:dec.decode(cd.subarray(p+46,p+46+nl)),enc:!!(flags&1)}); p+=46+nl+xl+cl;
+    }
+    return out;
+  }catch(e){ return null; }
+}
+async function scanFile(file,path,opts={}){
+  const R={name:file.name,path:path||"",size:file.size,level:"safe",why:[],hash:""};
+  const bad=(t)=>{ R.level="danger"; R.why.push(t); };
+  const warn=(t)=>{ if(R.level!=="danger") R.level="warn"; R.why.push(t); };
+  const name=file.name, ext=extOf(name);
+  // 1. file-name tricks
+  if(/[\u202A-\u202E\u2066-\u2069]/.test(name)) bad("the name uses a hidden character to fake its ending (a classic trick)");
+  const dbl=/\.(pdf|docx?|xlsx?|pptx?|txt|jpe?g|png|gif|mp4|mp3|zip)\s*\.([a-z0-9]{2,5})$/i.exec(name);
+  if(dbl && RISKY[dbl[2].toLowerCase()]) bad(`it pretends to be a .${dbl[1].toLowerCase()} but is really ${RISKY[dbl[2].toLowerCase()]}`);
+  else if(/\s{4,}\.[a-z0-9]{2,5}$/i.test(name)) warn("the name has lots of spaces to hide its real ending");
+  // quick pass for ordinary media files during a full scan
+  if(opts.quick && !R.why.length && /^(jpe?g|png|gif|webp|heic|bmp|mp4|mov|m4a|mp3|wav|mkv|avi|webm|flac|aac|ogg|ttf|otf|woff2?|svgz)$/i.test(ext)){
+    try{ const k=magicOf(new Uint8Array(await file.slice(0,16).arrayBuffer()));
+      if(!["exe","elf","macho","java","lnk","zip","script"].includes(k)) return R; }catch(e){}
+  }
+  // 2. what the file really is
+  let head=new Uint8Array(0);
+  try{ head=new Uint8Array(await file.slice(0,Math.min(file.size,4*1024*1024)).arrayBuffer()); }catch(e){ warn("I couldn't read this file"); return R; }
+  const kind=head.length>=4?magicOf(head):"";
+  const isProgram=["exe","elf","macho","java"].includes(kind);
+  if(isProgram && LOOKS_SAFE.test(ext)) bad(`it's named like a .${ext} file but it's really a program inside`);
+  else if(kind==="lnk" && ext!=="lnk") bad("it's really a Windows shortcut that can launch commands");
+  else if(RISKY[ext] && !R.why.length) warn(`this is ${RISKY[ext]}. it can run code when opened`);
+  else if(isProgram && !RISKY[ext]) warn("this is a program (it can run code)");
+  if(MACRO_EXT.test(ext)) warn("this Office file type can contain macros (little programs)");
+  // 3. inside the file
+  const txt=new TextDecoder("latin1").decode(head.subarray(0,Math.min(head.length,2*1024*1024)));
+  if(txt.includes(EICAR)) bad("it contains the standard antivirus test signature (EICAR). it's harmless, but every antivirus flags it");
+  if(kind==="pdf"){
+    if(/\/Launch/.test(txt)) bad("this PDF tries to launch another program");
+    if(/\/JavaScript|\/JS[\s(<\/]/.test(txt)) warn("this PDF contains JavaScript");
+    if(/\/EmbeddedFile/.test(txt)) warn("this PDF has another file hidden inside it");
+    if(/\/OpenAction|\/AA\s*<</.test(txt) && /\/JavaScript|\/JS[\s(<\/]|\/Launch|\/URI/.test(txt)) warn("this PDF does something automatically when opened");
+  }
+  if(kind==="ole" && /_VBA_PROJECT|VBA\x00|Macros/.test(txt)) warn("this Office file contains macros. don't click \"Enable content\"");
+  const looksText=!kind && head.length && !head.subarray(0,512).some(x=>x===0);
+  if(looksText || kind==="script" || ["js","vbs","ps1","bat","cmd","hta","wsf","sh","html","htm","svg"].includes(ext)){
+    let hits=0; for(const [re,label] of SCRIPT_SIGNS){ if(re.test(txt)){ hits++; R.why.push("it "+label); } }
+    if(hits>=2) R.level="danger"; else if(hits===1 && R.level==="safe") R.level="warn";
+    if(["html","htm","svg"].includes(ext) && /<form[^>]+action=["']?https?:/i.test(txt) && /password/i.test(txt))
+      warn("this page has a password form that sends to a website (a common phishing trick)");
+  }
+  // 4. archives
+  if(kind==="zip"){
+    const list=await zipNames(file);
+    if(list){
+      if(list.some(e=>/(^|\/)vbaProject\.bin$/i.test(e.name))) warn("this Office file contains macros. don't click \"Enable content\"");
+      const isApk=list.some(e=>/^AndroidManifest\.xml$/.test(e.name)) && list.some(e=>/^classes\d*\.dex$/.test(e.name));
+      if(isApk && ext!=="apk") bad("it's really an Android app in disguise");
+      else if(isApk) warn("this is an Android app. only install apps from the Play Store");
+      const inner=list.filter(e=>RISKY[extOf(e.name)]).map(e=>e.name);
+      if(inner.length && !isApk) warn("inside, there's a program or script: "+inner.slice(0,3).join(", ")+(inner.length>3?"…":""));
+      const fake=list.find(e=>{ const m=/\.(pdf|docx?|xlsx?|jpe?g|png|txt)\s*\.([a-z0-9]{2,5})$/i.exec(e.name); return m && RISKY[m[2].toLowerCase()]; });
+      if(fake) bad("inside, a program pretends to be a document: "+fake.name);
+      if(list.some(e=>e.enc) && !MACRO_EXT.test(ext) && !/^(docx|xlsx|pptx)$/.test(ext)) warn("it's locked with a password, so no scanner can see inside (a common trick)");
+    }
+  }
+  if(kind==="rar"||kind==="7z") { if(R.level==="safe") R.why.push("it's an archive I can't look inside. check what's in it before opening anything"); }
+  // 5. fingerprint
+  if(!opts.quick || R.level!=="safe") R.hash=await sha256(file);
+  if(R.hash && KNOWN_BAD[R.hash] && !R.why.some(w=>w.includes("EICAR"))) bad("it matches "+KNOWN_BAD[R.hash]);
+  return R;
+}
+
+/* ---------- scan flow ---------- */
+// MODE: "fs" = can remember folders (Chrome/Edge on computers), "dir" = pick a folder each time, "phone" = pick files
+// phones & foldables: Chrome on a Z Fold's big screen often pretends to be a computer ("desktop site"),
+// so we also look at the touch screen, not only the browser's name.
+const TOUCH_DEVICE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  || (navigator.userAgentData && navigator.userAgentData.mobile)
+  || (navigator.userAgentData && /Android/i.test(navigator.userAgentData.platform||""))
+  || (matchMedia("(pointer:coarse)").matches && navigator.maxTouchPoints>1 && !("showDirectoryPicker" in window));
+const MODE=("showDirectoryPicker" in window && !TOUCH_DEVICE)?"fs":(("webkitdirectory" in document.createElement("input"))&&!TOUCH_DEVICE)?"dir":"phone";
+const tick=()=>new Promise(r=>setTimeout(r,0));
+/* remembered folders live in IndexedDB (browsers can't store folder permissions in localStorage) */
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open("guardpal",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function kvGet(k){ try{ const db=await idb(); return await new Promise(res=>{ const q=db.transaction("kv").objectStore("kv").get(k); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); }); }catch(e){ return null; } }
+async function kvSet(k,v){ try{ const db=await idb(); await new Promise(res=>{ const t=db.transaction("kv","readwrite"); t.objectStore("kv").put(v,k); t.oncomplete=res; t.onerror=res; }); }catch(e){} }
+let folders=[]; // FileSystemDirectoryHandle[]
+async function loadFolders(){ folders=(await kvGet("folders"))||[]; }
+async function saveFolders(){ await kvSet("folders",folders); }
+
+let askKind="all";
+function promiseRows(rows){ return rows.map(([i,t])=>`<li><span>${i}</span><div>${t}</div></li>`).join(""); }
+function openAsk(kind){
+  if(NATIVE) return openAskNative(kind);
+  askKind=kind; $("askAdd").classList.add("hidden"); $("askFolders").innerHTML="";
+  const common=[["📱","Everything is checked <b>on this device</b>. Your files are never uploaded."],
+                ["👀","I only <b>read</b>. I never change, move or delete anything."],
+                ["🔁","I'll ask you like this <b>every time</b> before I scan."]];
+  if(kind==="pick"){
+    $("askTitle").textContent="Can I check some files?";
+    $("askList").innerHTML=promiseRows([["👆","I'll only look at the files <b>you choose</b> on the next screen."],...common]);
+    $("askYes").textContent="Yes, pick files";
+  } else if(MODE==="fs"){
+    $("askTitle").textContent=redAlert?"🚨 Can I inspect all your files now?":"Can I check all your files?";
+    if(folders.length){
+      $("askList").innerHTML=promiseRows([["📂","I'll check <b>every file</b> in the folders you allowed:"],...common]);
+      $("askFolders").innerHTML=folders.map(f=>`<div class="hist">📂 <b>${esc(f.name)}</b></div>`).join("");
+      $("askYes").textContent="Yes, check them all"; $("askAdd").classList.remove("hidden");
+    } else {
+      $("askList").innerHTML=promiseRows([["📂","Your browser will ask which folder I may look in. Choose <b>Downloads</b> first (that's where most viruses arrive). You can add Desktop, Documents and Pictures next."],...common]);
+      $("askYes").textContent="Yes, let me choose";
+    }
+  } else if(MODE==="dir"){
+    $("askTitle").textContent="Can I check all your files?";
+    $("askList").innerHTML=promiseRows([["📂","Next, choose a big folder (like <b>Downloads</b> or <b>Documents</b>) and I'll check every file inside it."],...common]);
+    $("askYes").textContent="Yes, choose a folder";
+  } else {
+    $("askTitle").textContent="Can I check all your files?";
+    $("askList").innerHTML=promiseRows([["📱","Phones don't let any website see all files on its own. On the next screen open <b>Downloads</b> (or any folder), tap <b>⋮ → Select all</b>, then <b>Done</b>. I'll check every one."],...common]);
+    $("askYes").textContent="Yes, open my files";
+  }
+  if(redAlert && kind==="all"){ $("askTitle").textContent="🚨 Can I inspect all your files now?"; if(MODE==="fs"&&folders.length) $("askYes").textContent="Yes, inspect everything"; }
+  show("vAsk");
+}
+$("askNo").onclick=()=>{ hide("vAsk"); if(redAlert){ endRedAlert(); setMood(""); say("okay, i won't look. if you change your mind, just tell me again.",5000); return; }
+  say("okay! i won't look at anything. i'm here when you need me."); };
+$("dScan").onclick=()=>openAsk("all");
+$("dFolder").onclick=()=>openAsk("pick");
+if(MODE==="phone"){ $("dFolder").classList.add("hidden"); $("dApps").classList.remove("hidden"); $("dScanL").textContent="Files";
+  // on phones, checking apps is the main job: make it the first, dark button
+  $("dScan").classList.remove("main"); $("dApps").classList.add("main"); $("dScan").parentNode.insertBefore($("dApps"),$("dScan")); }
+
+async function addFolder(){
+  try{
+    const h=await window.showDirectoryPicker({id:"guardpal",mode:"read",startIn:folders.length?"desktop":"downloads"});
+    for(const f of folders){ if(await f.isSameEntry(h)){ toast("that folder is already on my list"); return false; } }
+    folders.push(h); await saveFolders(); toast("I can now check "+h.name); return true;
+  }catch(e){
+    if(e&&e.name==="AbortError") return false;
+    toast("that folder is protected by your computer. try Downloads, Desktop or Documents."); return false;
+  }
+}
+$("askAdd").onclick=async()=>{ if(await addFolder()) openAsk("all"); };
+$("askYes").onclick=async()=>{
+  if(NATIVE){ hide("vAsk"); return nativeAskYes(); }
+  if(askKind==="pick"){ hide("vAsk"); const i=$("fileIn"); i.value=""; i.click(); return; }
+  if(MODE==="phone"){ hide("vAsk"); const i=$("fileIn"); i.value=""; i.click(); return; }
+  if(MODE==="dir"){ hide("vAsk"); const i=$("folderIn"); i.value=""; i.click(); return; }
+  // MODE fs
+  if(!folders.length){ if(await addFolder()) openAsk("all"); return; }
+  hide("vAsk");
+  const ready=[], need=[];
+  for(const f of folders){
+    try{ let p=await f.queryPermission({mode:"read"}); if(p!=="granted") p=await f.requestPermission({mode:"read"}); (p==="granted"?ready:need).push(f); }
+    catch(e){ need.push(f); }
+  }
+  if(need.length){ showAllow(ready,need); return; }
+  collectAndConfirm(ready);
+};
+function showAllow(ready,need){
+  $("askTitle").textContent="One more tap";
+  $("askList").innerHTML=promiseRows([["🔓","Your browser needs you to allow each folder. Tap each one below."]]);
+  $("askFolders").innerHTML=need.map((f,i)=>`<button class="go ghost" data-allow="${i}">Allow ${esc(f.name)}</button>`).join("");
+  $("askAdd").classList.add("hidden"); $("askYes").textContent=ready.length?"Scan the allowed folders":"Skip";
+  show("vAsk");
+  $("askFolders").querySelectorAll("[data-allow]").forEach(b=>b.onclick=async()=>{
+    const f=need[+b.dataset.allow];
+    try{ if(await f.requestPermission({mode:"read"})==="granted"){ ready.push(f); b.textContent="✓ "+f.name+" allowed"; b.disabled=true; $("askYes").textContent="Scan the allowed folders"; } }catch(e){}
+  });
+  $("askYes").onclick=()=>{ hide("vAsk"); $("askYes").onclick=null; restoreAskYes(); if(ready.length) collectAndConfirm(ready); };
+}
+let _askYesHandler=$("askYes").onclick; function restoreAskYes(){ $("askYes").onclick=_askYesHandler; }
+
+const SKIP_DIRS=/^(node_modules|\.git|\.svn|\.hg|__pycache__|\.cache|\.npm|\.gradle|\.m2|\.nuget|\.vscode|\.idea|Cache|Caches|GPUCache|Code Cache|ShaderCache|\.Trash-\d+)$/i;
+const MAX_ALL=50000;
+async function walk(dir,prefix,out){
+  for await (const [name,h] of dir.entries()){
+    if(out.length>=MAX_ALL) return;
+    if(h.kind==="file"){ out.push({h,p:prefix+name,name});
+      if(out.length%250===0){ $("progText").textContent=`Looking through your folders… ${out.length.toLocaleString()} files found`; await tick(); } }
+    else if(!SKIP_DIRS.test(name)){ try{ await walk(h,prefix+name+"/",out); }catch(e){} }
+  }
+}
+async function collectAndConfirm(dirs){
+  setMood("scanning"); $("radar").classList.add("on"); $("progress").classList.remove("hidden"); $("progBar").style.width="12%";
+  say("counting your files first. i won't open any until you say yes.",60000);
+  const out=[];
+  for(const d of dirs){ try{ await walk(d,d.name+"/",out); }catch(e){} }
+  $("radar").classList.remove("on"); $("progress").classList.add("hidden"); setMood(""); $("bubble").classList.remove("show");
+  confirmFiles(out,{all:true,dirs:dirs.map(d=>d.name)});
+}
+
+let picked=[], pickedOpts={};
+function confirmFiles(list,opts={}){
+  if(!list.length){ say(opts.all?"those folders are empty!":"no files picked. that's okay!"); return; }
+  picked=list; pickedOpts=opts;
+  const n=list.length.toLocaleString();
+  if(opts.all){
+    $("cfTitle").textContent="Check all "+n+" files?";
+    $("cfText").textContent="I found "+n+" files"+(list.length>=MAX_ALL?" (my limit per scan)":"")+". I'll read them on this device only. Nothing is uploaded, changed or deleted.";
+    const groups={}; list.forEach(x=>{ const parts=x.p.split("/"); const k=parts.slice(0,Math.min(2,parts.length-1)).join("/"); groups[k]=(groups[k]||0)+1; });
+    $("cfList").innerHTML=Object.entries(groups).sort((a,b)=>b[1]-a[1]).slice(0,60).map(([k,c])=>`<div class="hist">📂 <b>${esc(k)}</b><small>${c.toLocaleString()} file${c>1?"s":""}</small></div>`).join("");
+  } else {
+    const size=list.reduce((a,x)=>a+x.f.size,0), mb=size>=1048576?(size/1048576).toFixed(1)+" MB":Math.max(1,Math.round(size/1024))+" KB";
+    $("cfTitle").textContent=list.length===1?"Check this file?":"Check these "+n+" files?";
+    $("cfText").textContent="I'll read "+(list.length===1?"this file":"only these files")+" ("+mb+") on this device. Nothing is uploaded, changed or deleted.";
+    $("cfList").innerHTML=list.slice(0,200).map(x=>`<div class="hist">📄 <b>${esc(x.f.name)}</b>${x.p&&x.p!==x.f.name?`<small>${esc(x.p)}</small>`:""}</div>`).join("")
+      +(list.length>200?`<p class="note">…and ${(list.length-200).toLocaleString()} more</p>`:"");
+  }
+  show("vConfirm");
+}
+$("cfYes").onclick=()=>{ hide("vConfirm"); const l=picked, o=pickedOpts; picked=[]; pickedOpts={}; runScan(l,{quick:!!o.all||l.length>300}); };
+$("cfNo").onclick=()=>{ hide("vConfirm"); picked=[]; pickedOpts={}; if(redAlert){ endRedAlert(); setMood(""); } $("fileIn").value=""; $("folderIn").value="";
+  say("okay, i didn't look at anything. your files are untouched."); };
+$("fileIn").onchange=e=>confirmFiles([...e.target.files].map(f=>({f,p:"",name:f.name})));
+$("folderIn").onchange=e=>confirmFiles([...e.target.files].map(f=>({f,p:f.webkitRelativePath||"",name:f.name})),{all:true});
+
+/* settings: folder list */
+function renderFolders(){
+  $("gfBox").classList.toggle("hidden",MODE!=="fs");
+  $("gfList").innerHTML=folders.length?folders.map((f,i)=>`<div class="hist" style="display:flex;justify-content:space-between;align-items:center;gap:8px">📂 <b style="flex:1">${esc(f.name)}</b><button class="x" data-forget="${i}" aria-label="Forget ${esc(f.name)}">✕</button></div>`).join("")
+    :"<p>No folders yet. Tap <b>Scan all</b> to choose some.</p>";
+  $("gfList").querySelectorAll("[data-forget]").forEach(b=>b.onclick=async()=>{ folders.splice(+b.dataset.forget,1); await saveFolders(); renderFolders(); toast("forgotten. i can't look there anymore."); });
+}
+$("gfAdd").onclick=async()=>{ if(await addFolder()) renderFolders(); };
+loadFolders();
+
+let scanning=false;
+async function runScan(list,opts={}){
+  if(!list.length){ say("no files picked. that's okay!"); return; }
+  if(scanning) return; scanning=true;
+  if(list.length>MAX_ALL){ list=list.slice(0,MAX_ALL); toast("checking the first "+MAX_ALL.toLocaleString()+" files"); }
+  setMood("scanning"); $("radar").classList.add("on"); $("progress").classList.remove("hidden");
+  say(rnd(["on it! scanning…","shields up. checking…","let me take a careful look…"]),60000);
+  const results=[];
+  for(let i=0;i<list.length;i++){
+    const it=list[i], nm=it.name||(it.f&&it.f.name)||"file";
+    if(i%20===0||list.length<300){ $("progText").textContent=`Checking ${(i+1).toLocaleString()} of ${list.length.toLocaleString()}: ${nm}`;
+      $("progBar").style.width=((i+1)/list.length*100)+"%"; }
+    try{ const f=it.f||await it.h.getFile(); results.push(await scanFile(f,it.p,opts)); }
+    catch(e){ results.push({name:nm,path:it.p,level:"safe",why:["I couldn't open this file (it may be in use), so I skipped it"],hash:""}); }
+    if(i%10===9) await tick();
+  }
+  await new Promise(r=>setTimeout(r,500));
+  $("radar").classList.remove("on"); $("progress").classList.add("hidden"); scanning=false;
+  const d=results.filter(r=>r.level==="danger").length, w=results.filter(r=>r.level==="warn").length;
+  S.scans++; S.files+=results.length; S.threats+=d; S.warns+=w; S.lastScan=Date.now();
+  S.lastResult=d?"danger":w?"warn":"safe";
+  const before=level(); S.xp+=Math.min(60,results.length*2)+10; const up=level()>before;
+  S.history.unshift({t:Date.now(),type:"files",n:results.length,d,w,
+    items:results.filter(r=>r.level!=="safe").slice(0,20).map(r=>({name:r.name,level:r.level,why:r.why.slice(0,3)}))});
+  S.history=S.history.slice(0,40); save(); draw();
+  endRedAlert();
+  if(d){ setMood("alert"); say(`i found ${d} dangerous file${d>1?"s":""}! don't open ${d>1?"them":"it"}.`,8000); }
+  else if(w){ setMood(""); say(`all checked. ${w} file${w>1?"s need":" needs"} care, the rest look fine.`,7000); }
+  else { setMood("happy"); say(rnd(["all clear! nothing sneaky here.","looks clean to me!","no danger signs. good job!"]),6000); setTimeout(()=>setMood(""),6000); }
+  if(up) setTimeout(()=>say("i leveled up! guardian level "+level()+"!",5000),6500);
+  showResults(results);
+}
+function itemHTML(r){
+  const tag=r.level==="danger"?"Dangerous":r.level==="warn"?"Be careful":"Looks safe";
+  const todo=r.level==="danger"?"Don't open it. Delete it, then empty your trash or recycle bin."
+    :r.level==="warn"?"Only open it if you were expecting it from someone you trust.":"";
+  const vt=r.hash?`<div class="hash">Fingerprint (SHA-256): ${r.hash}<br><a href="https://www.virustotal.com/gui/file/${r.hash}" target="_blank" rel="noopener">Ask VirusTotal about this fingerprint</a> (only the fingerprint is shared, never the file)</div>`:"";
+  return `<div class="item ${r.level}"><div class="nm">${esc(r.name)}</div>${r.path?`<div class="path">${esc(r.path)}</div>`:""}
+    <span class="tag">${tag}</span>${r.why.length?`<ul>${r.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`:""}
+    ${todo?`<div class="todo">${todo}</div>`:""}${r.level!=="safe"?vt:""}</div>`;
+}
+function showResults(results){
+  const order={danger:0,warn:1,safe:2};
+  results.sort((a,b)=>order[a.level]-order[b.level]);
+  const d=results.filter(r=>r.level==="danger"), w=results.filter(r=>r.level==="warn"), s=results.filter(r=>r.level==="safe");
+  $("resBody").innerHTML=`<h2>Scan results <button class="x" data-close aria-label="Close">✕</button></h2>
+    <div class="summary"><div class="d"><b>${d.length}</b>dangerous</div><div class="w"><b>${w.length}</b>be careful</div><div class="s"><b>${s.length}</b>look safe</div></div>
+    ${d.concat(w).map(itemHTML).join("")}
+    ${s.length?`<details class="safe"${d.length+w.length?"":" open"}><summary>${s.length} file${s.length>1?"s":""} with no danger signs</summary>${s.slice(0,300).map(itemHTML).join("")}</details>`:""}
+    <p class="note">"Looks safe" means I found no danger signs. It isn't a guarantee. If something feels wrong, don't open it.</p>
+    <button class="go" data-close>Done</button>`;
+  show("vRes");
+}
+
+/* ---------- link checker ---------- */
+const BRANDS={paypal:"paypal.com",apple:"apple.com",icloud:"icloud.com",google:"google.com",gmail:"gmail.com",microsoft:"microsoft.com",
+ outlook:"outlook.com",office:"office.com",amazon:"amazon.com",netflix:"netflix.com",facebook:"facebook.com",instagram:"instagram.com",
+ whatsapp:"whatsapp.com",tiktok:"tiktok.com",snapchat:"snapchat.com",dhl:"dhl.com",fedex:"fedex.com",aramex:"aramex.com",
+ binance:"binance.com",coinbase:"coinbase.com",linkedin:"linkedin.com",youtube:"youtube.com",roblox:"roblox.com",steam:"steampowered.com",
+ bankmuscat:"bankmuscat.com",omantel:"omantel.om",ooredoo:"ooredoo.om",emiratesnbd:"emiratesnbd.com",adcb:"adcb.com",talabat:"talabat.com"};
+const SHORT=/^(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|cutt\.ly|rb\.gy|shorturl\.at|ow\.ly|buff\.ly|tiny\.cc|s\.id|t\.ly)$/i;
+const BADTLD=/\.(zip|mov|xyz|top|click|link|country|gq|tk|ml|cf|ga|work|support|rest|fit|cam|loan|men|bid|win|review|icu|monster|quest|sbs)$/i;
+function lev(a,b){ const m=a.length,n=b.length,d=Array.from({length:m+1},(_,i)=>[i].concat(Array(n).fill(0)));
+  for(let j=1;j<=n;j++) d[0][j]=j;
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return d[m][n]; }
+function checkLink(raw){
+  let s=raw.trim(); if(!s) return null;
+  if(!/^[a-z][a-z0-9+.-]*:/i.test(s)) s="https://"+s;
+  let u; try{ u=new URL(s); }catch(e){ return {level:"warn",why:["that doesn't look like a real web address"],host:raw}; }
+  const R={level:"safe",why:[],host:u.hostname,url:u.href};
+  const bad=t=>{R.level="danger";R.why.push(t);}, warn=t=>{ if(R.level!=="danger") R.level="warn"; R.why.push(t); };
+  if(!/^https?:$/.test(u.protocol)){ bad("it isn't a normal web link ("+u.protocol.replace(":","")+")"); return R; }
+  const host=u.hostname.toLowerCase().replace(/\.$/,"");
+  if(u.username||u.password||/@/.test(raw.split("?")[0].replace(/^https?:\/\//i,"").split("/")[0])) bad("it hides the real website behind an @ sign");
+  if(/^\d{1,3}(\.\d{1,3}){3}$/.test(host)||host.startsWith("[")) warn("it uses a number address instead of a website name");
+  if(host.includes("xn--")) bad("it uses look-alike letters from other alphabets to copy a real website");
+  if(u.protocol==="http:") warn("it isn't secure (http, not https). don't type passwords there");
+  if(SHORT.test(host)) warn("it's a short link that hides where it really goes");
+  if(BADTLD.test(host)) warn("it ends in ."+host.split(".").pop()+", which scammers use a lot");
+  const labels=host.split("."); if(labels.length>4) warn("it has an unusually long website name");
+  const reg=labels.slice(-2).join("."), regName=labels.length>=2?labels[labels.length-2]:host;
+  const norm=x=>x.replace(/rn/g,"m").replace(/vv/g,"w").replace(/0/g,"o").replace(/1/g,"l").replace(/3/g,"e").replace(/5/g,"s").replace(/[-_]/g,"");
+  const tokens=host.split(/[.-]/).map(norm).filter(Boolean);
+  for(const [b,official] of Object.entries(BRANDS)){
+    const offReg=official.split(".").slice(-2).join(".");
+    if(reg===offReg || host===official || host.endsWith("."+official)) continue;
+    if(new RegExp("(^|\\.)"+b+"\\.((com|co|net|org)\\.)?[a-z]{2}$").test(host)) continue; // country sites like amazon.ae, google.com.om
+    const hit=tokens.find(tk=>tk===b || (b.length>=6 && tk.length>=5 && lev(tk,b)===1));
+    if(hit){ bad(norm(regName)===b||lev(norm(regName),b)<=1 ? `it pretends to be ${b} but the real site is ${official}` : `it uses the name "${b}" but isn't ${official}`); break; }
+  }
+  if(/login|log-in|signin|verify|verification|update|secure|account|wallet|unlock|suspend|confirm|bonus|prize|gift/i.test(host+u.pathname) && R.level!=="safe")
+    R.why.push("it uses words like login, verify or prize to rush you");
+  const e=extOf(u.pathname); if(RISKY[e]) warn(`it downloads ${RISKY[e]} (.${e})`);
+  if(u.href.length>160) warn("it's a very long link, often used to hide tricks");
+  return R;
+}
+$("dLink").onclick=()=>{ $("urlRes").innerHTML=""; show("vLink"); setTimeout(()=>$("urlIn").focus(),250); };
+$("urlGo").onclick=()=>{
+  const R=checkLink($("urlIn").value); if(!R){ toast("paste a link first"); return; }
+  const tag=R.level==="danger"?"Dangerous":R.level==="warn"?"Be careful":"No danger signs";
+  const todo=R.level==="danger"?"Don't open it and don't enter any details. Delete the message."
+    :R.level==="warn"?"Only open it if you trust who sent it. Never enter passwords or bank details.":"Still be careful before typing passwords or card details.";
+  const gs=R.url?`<a href="https://transparencyreport.google.com/safe-browsing/search?url=${encodeURIComponent(R.url)}" target="_blank" rel="noopener">Ask Google Safe Browsing too</a>`:"";
+  $("urlRes").innerHTML=`<div class="item ${R.level}"><div class="nm">${esc(R.host)}</div><span class="tag">${tag}</span>
+    ${R.why.length?`<ul>${R.why.map(w=>`<li>${esc(w)}</li>`).join("")}</ul>`:""}<div class="todo">${todo}</div><div class="hash">${gs}</div></div>`;
+  S.links++; S.xp+=5;
+  S.history.unshift({t:Date.now(),type:"link",host:R.host,level:R.level}); S.history=S.history.slice(0,40); save(); draw();
+  if(R.level==="danger"){ setMood("alert"); say("that link is a trap! don't open it.",6000); }
+  else if(R.level==="warn"){ setMood(""); say("hmm, that link needs care.",5000); }
+  else { setMood("happy"); say("no tricks spotted in that link.",4500); setTimeout(()=>setMood(""),4500); }
+};
+$("urlIn").addEventListener("keydown",e=>{ if(e.key==="Enter") $("urlGo").click(); });
+
+/* ---------- history ---------- */
+$("dHist").onclick=()=>{
+  const h=S.history;
+  $("histBody").innerHTML=`<h2>History <button class="x" data-close aria-label="Close">✕</button></h2>
+    <div class="summary"><div class="s"><b>${S.files}</b>files checked</div><div class="w"><b>${S.links}</b>links checked</div><div class="d"><b>${S.threats}</b>threats found</div></div>
+    ${h.length?h.map(x=>x.type==="phone"?`<div class="hist">📱 <b>Phone scan</b>: ${x.apps} apps, ${x.files.toLocaleString()} files · ${x.d} dangerous, ${x.w} be careful<small>${new Date(x.t).toLocaleString()}</small></div>`:x.type==="apps"?`<div class="hist">📱 <b>Apps check-up</b>: ${x.bad?x.bad+" fixed":"all fine"}${x.idk?", "+x.idk+" not sure":""}<small>${new Date(x.t).toLocaleString()}</small></div>`:x.type==="link"
+      ?`<div class="hist">🔗 <b>${esc(x.host)}</b>: ${x.level==="danger"?"dangerous":x.level==="warn"?"be careful":"no danger signs"}<small>${new Date(x.t).toLocaleString()}</small></div>`
+      :`<div class="hist">🔍 <b>${x.n} file${x.n>1?"s":""}</b>: ${x.d} dangerous, ${x.w} be careful${x.items&&x.items.length?`<small>${x.items.map(i=>esc(i.name)).slice(0,4).join(", ")}</small>`:""}<small>${new Date(x.t).toLocaleString()}</small></div>`).join("")
+      :`<p>Nothing yet. Tap <b>Scan files</b> or <b>Check link</b>.</p>`}
+    ${h.length?`<button class="go ghost" id="histClear">Clear history</button>`:""}`;
+  show("vHist");
+  const c=$("histClear"); if(c) c.onclick=()=>{ S.history=[]; save(); hide("vHist"); toast("history cleared"); };
+};
+
+/* ---------- veils ---------- */
+function show(id){ $(id).classList.remove("hidden"); }
+function hide(id){ $(id).classList.add("hidden"); }
+document.addEventListener("click",e=>{
+  const v=e.target.closest(".veil"); if(!v||v.id==="vHatch") return;
+  if(v.id==="vConfirm"){ if(e.target===v) $("cfNo").click(); return; }
+  if(e.target===v||e.target.closest("[data-close]")) hide(v.id);
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") document.querySelectorAll(".veil:not(#vHatch)").forEach(v=>v.classList.add("hidden")); });
+
+
+
+/* ---------- phone apps check-up (guided, because no website can list your apps) ---------- */
+const UA=navigator.userAgent;
+const IS_IOS_DEV=/iPhone|iPad|iPod/i.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1);
+const IS_ANDROID=/Android/i.test(UA)||(TOUCH_DEVICE&&!IS_IOS_DEV);
+const IS_SAMSUNG=/SM-|Samsung/i.test(UA)||(navigator.userAgentData&&(navigator.userAgentData.brands||[]).some(b=>/Samsung/i.test(b.brand)))||(IS_ANDROID&&!/Pixel|Xiaomi|Redmi|OnePlus|Huawei|Oppo|vivo/i.test(UA));
+const ANDROID_STEPS=[
+ {t:"Play Protect scan",q:"Did Play Protect find any harmful apps?",
+  path:"Play Store → tap your profile picture → Play Protect → Scan",
+  why:"Google's own scanner can look inside your installed apps. I'm not allowed to, so let's ask it.",
+  ok:"No harmful apps found",bad:"It found something / it's turned off",
+  fix:"Tap the harmful app in Play Protect and choose <b>Uninstall</b>. If Play Protect was off, turn on <b>Scan apps with Play Protect</b> in its settings (⚙️)."},
+ {t:"Apps that can install other apps",q:"Is any app allowed to install apps, other than ones you trust?",
+  path:IS_SAMSUNG?"Settings → Apps → ⋮ (top right) → Special access → Install unknown apps":"Settings → Apps → Special app access → Install unknown apps",
+  why:"Viruses usually sneak in through apps that are allowed to install other apps, like a browser or WhatsApp.",
+  ok:"All are off (Not allowed)",bad:"Some are allowed",
+  fix:"Switch every one to <b>Not allowed</b>. You can turn one on briefly if you ever really need it, then switch it off again."},
+ {t:"Accessibility",q:"Is any app you don't recognise switched ON here?",
+  path:IS_SAMSUNG?"Settings → Accessibility → Installed apps":"Settings → Accessibility → Downloaded apps",
+  why:"Accessibility lets an app read your screen and tap for you. Banking viruses love it.",
+  ok:"Nothing strange is on",bad:"Yes, something I don't know",
+  fix:"Switch it <b>off</b>, then uninstall that app. If it turns itself back on, that's a strong sign of a virus. Use Safe mode (below) to remove it."},
+ {t:"Device admin apps",q:"Is anything here besides Find My Mobile / Find My Device?",
+  path:IS_SAMSUNG?"Settings → Security and privacy → More security settings → Device admin apps":"Settings → Security → Device admin apps",
+  why:"Device admin apps can stop you from uninstalling them. Normal apps almost never need it.",
+  ok:"Only Find My Mobile / Device",bad:"There's something else",
+  fix:"Switch that app off here first (<b>Deactivate</b>), then go to Settings → Apps and uninstall it."},
+ {t:"Apps drawn on top",q:"Can any app you don't know appear on top of other apps?",
+  path:IS_SAMSUNG?"Settings → Apps → ⋮ → Special access → Appear on top":"Settings → Apps → Special app access → Display over other apps",
+  why:"Scam apps draw fake login screens on top of your real apps to steal passwords.",
+  ok:"Only apps I know",bad:"Yes, one I don't know",
+  fix:"Switch it off, then uninstall that app."},
+ {t:"SMS and notification access",q:"Does any app you don't trust have SMS or notification access?",
+  path:IS_SAMSUNG?"Settings → Apps → ⋮ → Special access → Notification access (and Settings → Security and privacy → Permission manager → SMS)":"Settings → Apps → Special app access → Notification access, and Permission manager → SMS",
+  why:"Apps that read SMS and notifications can steal the OTP codes your bank sends you.",
+  ok:"No, all apps I trust",bad:"Yes, one I don't trust",
+  fix:"Remove its access, then uninstall it. If a banking OTP was ever read, call your bank."},
+ {t:"Apps you didn't install",q:"Scroll your apps list. Is there an app you didn't install, or one with no name or icon?",
+  path:"Settings → Apps (scroll the whole list)",
+  why:"Some viruses hide with a blank icon or a boring name like \"System Update\" or \"Service\".",
+  ok:"No, I know them all",bad:"Yes, there's a strange one",
+  fix:"Tap it and choose <b>Uninstall</b>. If Uninstall is greyed out, deactivate it in Device admin apps first, or use Safe mode."},
+ {t:"Updates",q:"Is your phone and are your apps up to date?",
+  path:IS_SAMSUNG?"Settings → Software update → Download and install, then Play Store → profile → Manage apps & device → Update all":"Settings → System → Software update, then Play Store → profile → Manage apps & device → Update all",
+  why:"Updates close the holes viruses use to get in.",
+  ok:"Yes, everything's updated",bad:"No, updates are waiting",
+  fix:"Install the updates now, while charging and on Wi-Fi."}
+];
+const IOS_STEPS=[
+ {t:"iPhone update",q:"Is your iPhone up to date?",path:"Settings → General → Software Update",
+  why:"Updates close the security holes attackers use.",ok:"Yes, up to date",bad:"No, an update is waiting",fix:"Tap <b>Update Now</b> while charging and on Wi-Fi."},
+ {t:"Profiles",q:"Is there a profile here that you don't recognise?",path:"Settings → General → VPN & Device Management",
+  why:"A strange profile can watch your traffic or control settings. Work or school profiles are normal.",
+  ok:"Nothing / only work or school",bad:"Yes, one I don't know",fix:"Tap it and choose <b>Remove Profile</b>."},
+ {t:"Safety Check",q:"Did Safety Check show people, apps or devices you don't recognise?",path:"Settings → Privacy & Security → Safety Check → Manage Sharing & Access",
+  why:"This shows who and what can see your location, photos and more.",ok:"All looks right",bad:"Yes, something strange",fix:"Stop sharing with anything you don't recognise, right there in Safety Check."},
+ {t:"Signed-in devices",q:"Is any device signed in to your Apple Account that isn't yours?",path:"Settings → tap your name → scroll to the device list",
+  why:"Someone signed in to your account can see your data.",ok:"All mine",bad:"There's one I don't know",fix:"Tap it → <b>Remove from Account</b>, then change your Apple Account password."},
+ {t:"Apps you didn't install",q:"Is there an app you didn't install?",path:"Swipe left to the App Library and look through it",
+  why:"iPhones rarely get viruses, but scam apps and stalkerware can still be installed.",ok:"No, I know them all",bad:"Yes, one I don't know",fix:"Press and hold it → <b>Delete App</b>."}
+];
+let AP={steps:[],i:0,ans:[]};
+function startApps(fromAlert){
+  AP={steps:IS_ANDROID?ANDROID_STEPS:IOS_STEPS,i:-1,ans:[],fromAlert:!!fromAlert};
+  if(!fromAlert){ setMood("scanning"); }
+  renderApps(); show("vApps");
+}
+function dots(){ return `<div class="apdots">${AP.steps.map((_,k)=>`<i class="${k<AP.ans.length?(AP.ans[k]==="bad"?"bad":AP.ans[k]==="idk"?"meh":"done"):""}"></i>`).join("")}</div>`; }
+function renderApps(){
+  const n=S.name||"Byte", B=$("apBody");
+  if(AP.i<0){
+    B.innerHTML=`<h2 id="apTitle">${AP.fromAlert?"🚨 ":""}Can I check your apps with you? <button class="x" id="apClose" aria-label="Close">✕</button></h2>
+      <p>Phones don't let any website look at your apps, not even me. So we'll do it <b>together</b>: I'll show you exactly where to look, you tell me what you see.</p>
+      <ul class="promise"><li><span>🧭</span><div>${AP.steps.length} quick steps, about 3 minutes.</div></li>
+      <li><span>🙈</span><div>I can't see your screen or your apps. You stay in control.</div></li>
+      <li><span>🔁</span><div>You can stop anytime.</div></li></ul>
+      <button class="go" id="apGo">Yes, let's check my apps</button><button class="go ghost" id="apNo">Not now</button>`;
+    $("apGo").onclick=()=>{ AP.i=0; renderApps(); };
+    $("apNo").onclick=$("apClose").onclick=()=>closeApps(true);
+    return;
+  }
+  if(AP.i>=AP.steps.length) return finishApps();
+  const st=AP.steps[AP.i];
+  B.innerHTML=`<h2 id="apTitle">${esc(st.t)} <button class="x" id="apClose" aria-label="Stop">✕</button></h2>
+    <div class="apstep">Step ${AP.i+1} of ${AP.steps.length}</div>${dots()}
+    <p>${st.why}</p>
+    <div class="where">📍 ${st.path}${IS_ANDROID&&!IS_SAMSUNG?"":""}<small>Go there on your phone, then come back here.</small></div>
+    <p style="color:var(--ink);font-weight:600">${st.q}</p>
+    <div class="ans"><button class="ok" data-a="ok">✅ ${st.ok}</button><button class="bad" data-a="bad">⚠️ ${st.bad}</button><button class="idk" data-a="idk">🤷 I'm not sure</button></div>`;
+  $("apClose").onclick=()=>closeApps(true);
+  B.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>answerApps(b.dataset.a));
+}
+function answerApps(a){
+  AP.ans[AP.i]=a; const st=AP.steps[AP.i];
+  if(a==="bad"){
+    redAlert=true; setMood("alert");
+    $("apBody").innerHTML=`<h2 id="apTitle">Let's fix that <button class="x" id="apClose" aria-label="Stop">✕</button></h2>${dots()}
+      <div class="fix">${st.fix}</div>
+      ${/Safe mode/.test(st.fix)&&IS_ANDROID?`<div class="where">🛟 Safe mode: hold the power button, then press and hold <b>Power off</b> until "Safe mode" appears. Tap it. Third-party apps are paused, so you can uninstall the bad one. Restart to leave Safe mode.</div>`:""}
+      <button class="go" id="apNext">Done, next step</button>`;
+    say("found something! let's fix it together.",4000);
+  } else {
+    if(a==="ok") say(rnd(["good!","nice, that's clean.","great, next!"]),1800);
+    AP.i++; renderApps(); return;
+  }
+  $("apClose").onclick=()=>closeApps(true);
+  $("apNext").onclick=()=>{ AP.i++; renderApps(); };
+}
+function finishApps(){
+  const bad=AP.ans.filter(x=>x==="bad").length, idk=AP.ans.filter(x=>x==="idk").length;
+  S.lastScan=Date.now(); S.scans++; S.lastResult=bad?"warn":idk?"warn":"safe"; S.xp+=40;
+  S.history.unshift({t:Date.now(),type:"apps",bad,idk,n:AP.steps.length}); S.history=S.history.slice(0,40); save();
+  redAlert=false;
+  if(bad){ setMood(""); } else { setMood("happy"); setTimeout(()=>setMood(""),5000); }
+  draw();
+  $("apBody").innerHTML=`<h2 id="apTitle">Apps check-up done <button class="x" id="apClose" aria-label="Close">✕</button></h2>${dots()}
+    <div class="summary"><div class="s"><b>${AP.ans.filter(x=>x==="ok").length}</b>looked fine</div><div class="d"><b>${bad}</b>fixed</div><div class="w"><b>${idk}</b>not sure</div></div>
+    <p>${bad?"You found and fixed "+bad+" problem"+(bad>1?"s":"")+". If your phone still acts strange, back up your photos and do a factory reset, or visit the official service centre.":idk?"Mostly good! For the ones you weren't sure about, ask someone you trust to look with you.":"Your apps look clean. Nice work!"}</p>
+    <button class="go" id="apFiles">Also check my downloaded files</button><button class="go ghost" id="apDone">Done</button>`;
+  say(bad?"good job fixing that. i'll keep watch!":"all done! your apps look clean. 💙",5000);
+  $("apClose").onclick=$("apDone").onclick=()=>hide("vApps");
+  $("apFiles").onclick=()=>{ hide("vApps"); openAsk("all"); };
+}
+function closeApps(stopped){
+  hide("vApps");
+  if(stopped){ if(redAlert){ redAlert=false; } setMood(""); say("okay, we can finish the check-up anytime.",3500); }
+}
+$("dApps").onclick=()=> NATIVE ? openAsk("apps") : startApps(false);
+
+
+/* ---------- native Android app: real scanning ---------- */
+const nativeCbs={}; let cbN=0;
+window.__nativeCb=(id,json)=>{ const f=nativeCbs[id]; delete nativeCbs[id]; if(!f) return; let d; try{ d=JSON.parse(json); }catch(e){ d={error:String(e)}; } f(d); };
+function nat(method,...args){ return new Promise(res=>{ const id="cb"+(++cbN); nativeCbs[id]=res; try{ GuardNative[method](...args,id); }catch(e){ delete nativeCbs[id]; res({error:String(e)}); } }); }
+let natKind="apps", wantFilesAfterPermission=false, lastNative=null;
+function openAskNative(kind){
+  natKind=kind; $("askAdd").classList.add("hidden"); $("askFolders").innerHTML="";
+  const common=[["📱","Everything is checked <b>on this phone</b>. Nothing is uploaded."],
+                ["✋","I never delete anything by myself. <b>You</b> tap Uninstall or Delete."]];
+  if(kind==="rt"){
+    $("askTitle").textContent="Can I stand guard all the time?";
+    $("askList").innerHTML=promiseRows([["⚡","I'll check <b>every new app the moment it's installed</b> and warn you straight away."],
+      ["🔁","I'll re-check all your apps every few hours."],["🔔","Android shows a small \"Byte is on guard\" notification while I'm on duty."],["🔧","Turn it off anytime in ⚙️ Settings."]]);
+    $("askYes").textContent="Yes, protect my phone";
+  } else if(kind==="apps"){
+    $("askTitle").textContent=redAlert?"🚨 Can I inspect all your apps now?":"Can I scan all your apps?";
+    $("askList").innerHTML=promiseRows([["🔍","I'll check <b>every installed app</b>: where it came from, and whether it uses Accessibility, Device admin, SMS, overlays or a hidden icon."],...common]);
+    $("askYes").textContent="Yes, scan my apps";
+  } else {
+    const all=kind==="all";
+    $("askTitle").textContent=all?(redAlert?"🚨 Can I inspect your whole phone now?":"Can I scan your whole phone?"):"Can I scan your phone's storage?";
+    const rows=[];
+    if(all) rows.push(["🔍","I'll check <b>every installed app</b> first."]);
+    rows.push(["📂", GuardNative.hasAllFiles()?"Then <b>every file</b> in your storage: Downloads, WhatsApp, Telegram, Documents and more."
+      :"For your files, Android needs you to switch on <b>All files access</b> for Guard Pal once. I only read files to check them."]);
+    $("askList").innerHTML=promiseRows([...rows,...common]);
+    $("askYes").textContent=all?"Yes, inspect everything":"Yes, scan my storage";
+  }
+  show("vAsk");
+}
+function nativeAskYes(){
+  if(natKind==="rt"){ GuardNative.setGuard(true); say("i'm on guard now! every new app gets checked. 🛡️",5000); setTimeout(draw,800); return; }
+  if(natKind==="apps") return nativeScan(true,false);
+  const files=GuardNative.hasAllFiles();
+  if(!files){ wantFilesAfterPermission=natKind; say("switch on “Allow access to manage all files” for Guard Pal, then come back.",8000); GuardNative.askAllFiles(); return; }
+  nativeScan(natKind==="all",true);
+}
+window.__nativeResume=()=>{
+  draw();
+  if(wantFilesAfterPermission && GuardNative.hasAllFiles()){ const k=wantFilesAfterPermission; wantFilesAfterPermission=false; nativeScan(k==="all",true); return; }
+  if(wantFilesAfterPermission && !GuardNative.hasAllFiles()){ const k=wantFilesAfterPermission; wantFilesAfterPermission=false;
+    if(k==="all"){ say("no file access, so i'll check your apps only.",5000); nativeScan(true,false); } else { endRedAlert(); setMood(""); say("okay, i won't look at your files.",4000); } return; }
+  if(lastNative && !$("vRes").classList.contains("hidden") && lastNative.apps && !scanning) refreshApps();
+};
+window.__nativeFocus=async(pkg)=>{
+  const a=await nat("scanOne",pkg); if(!a||!a.pkg) return;
+  lastNative={apps:{apps:[a],checked:1,danger:a.level==="danger"?1:0,warn:a.level==="warn"?1:0},files:null,focus:true};
+  if(a.level==="danger"){ setMood("alert"); say("this is the app i warned you about. let's deal with it.",6000); }
+  showNative();
+};
+window.__nativeBack=()=>{ const open=[...document.querySelectorAll(".veil:not(.hidden)")].filter(v=>v.id!=="vHatch"); if(open.length){ open.forEach(v=>v.classList.add("hidden")); return true; } return false; };
+async function nativeScan(apps,files){
+  if(scanning) return; scanning=true;
+  setMood("scanning"); $("radar").classList.add("on"); $("progress").classList.remove("hidden"); $("progBar").style.width="15%";
+  say(rnd(["shields up! inspecting…","on it. checking everything…","scanning. nothing escapes me…"]),60000);
+  let A=null,F=null;
+  if(apps){ $("progText").textContent="Checking every app on your phone…"; A=await nat("scanApps"); $("progBar").style.width=files?"45%":"90%"; }
+  if(files){ $("progText").textContent="Checking every file in your storage… (this can take a minute)"; F=await nat("scanStorage"); }
+  $("progBar").style.width="100%"; await new Promise(r=>setTimeout(r,300));
+  $("radar").classList.remove("on"); $("progress").classList.add("hidden"); scanning=false;
+  const d=(A&&A.danger||0)+(F&&F.danger||0), w=(A&&A.warn||0)+(F&&F.warn||0);
+  const n=(A&&A.checked||0)+(F&&F.checked||0);
+  S.scans++; S.files+=n; S.threats+=d; S.warns+=w; S.lastScan=Date.now(); S.lastResult=d?"danger":w?"warn":"safe";
+  const before=level(); S.xp+=Math.min(80,20+Math.round(n/20)); const up=level()>before;
+  S.history.unshift({t:Date.now(),type:"phone",apps:A&&A.checked||0,files:F&&F.checked||0,d,w,
+    items:[...(A&&A.apps||[]),...(F&&F.files||[])].filter(x=>x.level!=="safe").slice(0,20).map(x=>({name:x.name,level:x.level}))});
+  S.history=S.history.slice(0,40); save(); endRedAlert(); draw();
+  if(d){ setMood("alert"); say(`i found ${d} dangerous thing${d>1?"s":""}! let's get rid of ${d>1?"them":"it"}.`,8000); }
+  else if(w){ setMood(""); say(`checked ${n.toLocaleString()} things. ${w} need${w>1?"":"s"} a look.`,7000); }
+  else { setMood("happy"); say(`checked ${n.toLocaleString()} things. all clear! 💙`,6000); setTimeout(()=>setMood(""),6000); }
+  if(up) setTimeout(()=>say("i leveled up! guardian level "+level()+"!",5000),6500);
+  lastNative={apps:A,files:F}; showNative();
+  if(!GuardNative.guardOn() && !S.rtAsked){ S.rtAsked=true; save(); setTimeout(()=>{ if($("vRes").classList.contains("hidden")) openAsk("rt"); },9000); }
+}
+async function refreshApps(){ const A=await nat("scanApps"); if(A&&A.apps){ lastNative.apps=A; showNative(true); } }
+function nativeAppHTML(a){
+  const tag=a.level==="danger"?"Dangerous":a.level==="warn"?"Be careful":"Looks safe";
+  const f=a.flags||[];
+  const todo=a.level==="danger"?(f.includes("admin")?"Remove its Device admin first, then uninstall it.":"Uninstall it now.")
+    :a.level==="warn"?"Uninstall it unless you know and trust it.":"";
+  const btn=(label,attr,cls)=>`<button class="go ${cls||"ghost"}" style="min-height:44px;font-size:15px;margin-top:6px" ${attr}>${label}</button>`;
+  return `<div class="item ${a.level}"><div class="nm">${esc(a.name)}</div><div class="path">${esc(a.pkg)}${a.installer?" · from "+esc(a.installer):""}</div>
+    <span class="tag">${tag}</span>${a.why&&a.why.length?`<ul>${a.why.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+    ${todo?`<div class="todo">${todo}</div>`:""}
+    ${a.level!=="safe"?`${f.includes("admin")?btn("1. Remove Device admin",`data-sec="1"`):""}${f.includes("accessibility")?btn("Turn off its Accessibility",`data-acc="1"`):""}
+    ${btn("Uninstall "+esc(a.name),`data-uninst="${esc(a.pkg)}"`,"bye")}${btn("App settings",`data-appset="${esc(a.pkg)}"`)}`:""}</div>`;
+}
+function nativeFileHTML(x){
+  const tag=x.level==="danger"?"Dangerous":"Be careful";
+  return `<div class="item ${x.level}" data-fitem="${esc(x.path)}"><div class="nm">${esc(x.name)}</div><div class="path">${esc(x.path)}</div>
+    <span class="tag">${tag}</span><ul>${(x.why||[]).map(w=>`<li>${esc(w)}</li>`).join("")}</ul>
+    <div class="todo">${x.level==="danger"?"Don't open it. Delete it.":"Only open it if you trust where it came from."}</div>
+    <button class="go bye" style="min-height:44px;font-size:15px;margin-top:6px" data-del="${esc(x.path)}" data-dname="${esc(x.name)}">Delete this file</button></div>`;
+}
+function showNative(quiet){
+  const A=lastNative.apps, F=lastNative.files, ord={danger:0,warn:1,safe:2};
+  const apps=(A&&A.apps||[]).slice().sort((a,b)=>ord[a.level]-ord[b.level]||b.score-a.score);
+  const badApps=apps.filter(a=>a.level!=="safe"), okApps=apps.filter(a=>a.level==="safe");
+  const files=(F&&F.files||[]).slice().sort((a,b)=>ord[a.level]-ord[b.level]);
+  const d=badApps.filter(a=>a.level==="danger").length+files.filter(x=>x.level==="danger").length;
+  const w=badApps.filter(a=>a.level==="warn").length+files.filter(x=>x.level==="warn").length;
+  const ok=okApps.length+Math.max(0,(F&&F.checked||0)-files.length);
+  $("resBody").innerHTML=`<h2>${lastNative.focus?"App check":"Phone scan results"} <button class="x" data-close aria-label="Close">✕</button></h2>
+    <div class="summary"><div class="d"><b>${d}</b>dangerous</div><div class="w"><b>${w}</b>be careful</div><div class="s"><b>${ok.toLocaleString()}</b>look safe</div></div>
+    ${A?`<h3>📱 Apps ${A.checked?`<small style="font-weight:500;color:var(--ink-soft)">(${A.checked} checked)</small>`:""}</h3>${badApps.length?badApps.map(nativeAppHTML).join(""):`<p>No dangerous apps found. 💙</p>`}
+      ${okApps.length&&!lastNative.focus?`<details class="safe"><summary>${okApps.length} apps with no danger signs</summary>${okApps.map(a=>`<div class="hist">${esc(a.name)}<small>${esc(a.pkg)}${a.store?"":" · not from an app store"}</small></div>`).join("")}</details>`:""}
+      ${lastNative.focus&&okApps.length?okApps.map(nativeAppHTML).join(""):""}`:""}
+    ${F?`<h3>📂 Files <small style="font-weight:500;color:var(--ink-soft)">(${(F.checked||0).toLocaleString()} checked)</small></h3>${files.length?files.map(nativeFileHTML).join(""):`<p>No dangerous files found.</p>`}`:""}
+    ${A&&A.error||F&&F.error?`<p class="note">Something went wrong: ${esc((A&&A.error)||(F&&F.error))}</p>`:""}
+    <p class="note">After you uninstall something, come back here and the list updates.</p>
+    <button class="go" data-close>Done</button>`;
+  if(!quiet||$("vRes").classList.contains("hidden")) show("vRes");
+}
+$("resBody").addEventListener("click",e=>{
+  if(!NATIVE) return;
+  const u=e.target.closest("[data-uninst]"); if(u){ GuardNative.uninstall(u.dataset.uninst); say("tap OK to remove it. good riddance!",4000); return; }
+  const s=e.target.closest("[data-appset]"); if(s){ GuardNative.openAppSettings(s.dataset.appset); return; }
+  const a=e.target.closest("[data-acc]"); if(a){ GuardNative.openAccessibility(); toast("find the app and switch it off"); return; }
+  const sec=e.target.closest("[data-sec]"); if(sec){ GuardNative.openSecurity(); toast("open Device admin apps and switch it off"); return; }
+  const del=e.target.closest("[data-del]");
+  if(del){ if(!confirm("Delete \""+del.dataset.dname+"\"?\n\nThis can't be undone.")) return;
+    if(GuardNative.deleteFile(del.dataset.del)){ const it=del.closest(".item"); if(it){ it.style.opacity=".4"; del.remove(); it.querySelector(".todo").textContent="Deleted ✓"; }
+      setMood("happy"); say("deleted! one less threat.",3500); setTimeout(()=>setMood(""),3500);
+      if(lastNative&&lastNative.files) lastNative.files.files=lastNative.files.files.filter(x=>x.path!==del.dataset.del); }
+    else toast("couldn't delete it. try from your Files app."); }
+});
+$("setRT").onchange=e=>{ GuardNative.setGuard(e.target.checked); setTimeout(draw,700); say(e.target.checked?"on guard! 🛡️":"okay, real-time protection is off. i'm still here for manual scans.",4000); };
+if(NATIVE){
+  $("dScan").onclick=()=>openAsk("files");
+  document.title="Guard Pal";
+}
+
+/* ---------- chat: type to your guardian ---------- */
+const WORRY=/\b(virus|viruses|malware|trojan|worm|spyware|adware|ransomware|keylogger|rootkit|infected|infection|hacked|hacker|compromised|backdoor)\b|فيروس|فايروس|اختراق|مخترق|هكر|تهكير/i;
+const SYMPTOM=/\b(pop.?ups?|slow|freez|crash|weird|strange|acting up|unknown app|won'?t stop|ads everywhere|redirect|locked (my )?files|encrypted my|ransom)\b/i;
+const URLRE=/((https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(\/[^\s]*)?)/i;
+function reply(t,hold){ say(t,hold||Math.min(9000,2500+t.length*55)); }
+function redAlertInspect(msg){
+  redAlert=true; setMood("alert"); if(navigator.vibrate) try{ navigator.vibrate([80,60,80]); }catch(e){}
+  reply(msg||"uh oh! red alert! 🚨 let me inspect everything.",4200);
+  setTimeout(()=> NATIVE ? openAsk("all") : MODE==="phone" ? startApps(true) : openAsk("all"), 1400);
+}
+function handleChat(raw){
+  const t=raw.trim(); if(!t) return;
+  addMsg("me",t); $("bubble").classList.remove("show"); clearTimeout(bubT); logging=true;
+  try{ handleChat2(t); } finally { logging=false; }
+}
+function handleChat2(t){
+  if(scanning){ reply("i'm in the middle of a scan. give me a moment!"); return; }
+  if(WORRY.test(t) && !/\b(what is|what's|explain|define|how do viruses)\b/i.test(t)){ redAlertInspect(); return; }
+  if(SYMPTOM.test(t)){ redAlertInspect("that could be a sign of something sneaky. 🚨 let me inspect your files."); return; }
+  if(/\bapps?\b|applications?/i.test(t) && /\b(check|scan|inspect|bad|virus|strange|weird|safe)\b/i.test(t)){
+    if(NATIVE){ openAsk("apps"); reply("say yes and i'll check every single app."); }
+    else if(MODE==="phone"){ startApps(false); reply("let's check your apps together!"); }
+    else reply("app check-ups are for phones. on your phone, open me and tap 📱 Apps. here i can scan your files!");
+    return; }
+  if(/\b(scan|check|inspect)\b.*\b(all|everything|computer|pc|laptop|phone|files?)\b|^scan$|^check$/i.test(t)){ openAsk("all"); reply("sure! just say yes and i'll start."); return; }
+  const m=URLRE.exec(t);
+  if(m && !/\s/.test(m[1]) && m[1].includes(".") && !/^\d+(\.\d+)+$/.test(m[1])){
+    $("urlIn").value=m[1]; $("urlRes").innerHTML=""; show("vLink"); $("urlGo").click(); return; }
+  if(/\b(otp|pin|password|passcode|cvv)\b/i.test(t) && /\b(asked|send|share|give|call|message|sms|whatsapp)\b/i.test(t)){
+    reply("never share an OTP, PIN or password with anyone, even if they say they're from your bank. real banks never ask for it.",9000); return; }
+  if(/\b(won|winner|prize|lottery|gift card|inheritance)\b/i.test(t)){ reply("sounds like a scam! surprise prizes that ask for money or details are almost always fake. don't click, don't pay.",8500); return; }
+  if(/\b(my (email|account|instagram|whatsapp|facebook) (got|was|is))\b.*\b(hacked|stolen|taken)\b/i.test(t)){
+    reply("change that password now, turn on two-step verification, and log out of other devices in the account settings.",9000); return; }
+  if(/\b(hi|hello|hey|salam|marhaba|good (morning|evening))\b|السلام|مرحبا/i.test(t)){ setMood("happy"); reply(rnd(["hi! i'm "+(S.name||"Byte")+". how can i help keep you safe?","hello! all quiet on my side. need a scan?"])); setTimeout(()=>setMood(""),3500); return; }
+  if(/\b(thank|thanks|shukran)\b|شكرا/i.test(t)){ setMood("happy"); reply("anytime! guarding you is my favourite job. 💙"); setTimeout(()=>setMood(""),3500); return; }
+  if(/how are you|how r u|status|am i safe|are we safe/i.test(t)){ const [,txt]=statusInfo(); reply("status: "+txt.toLowerCase()+". last check "+ago(S.lastScan)+"."); return; }
+  if(/\btip|advice|help me stay safe\b/i.test(t)){ tip(); return; }
+  if(/who are you|what (can|do) you do|what are you/i.test(t)){ reply("i'm your guardian! i check files and links for danger signs, only with your permission. tell me if you think you have a virus and i'll inspect.",9000); return; }
+  if(/what is a virus|what's a virus|what are viruses/i.test(t)){ reply("a virus is a sneaky program that hides inside other files and does bad things, like stealing passwords or locking files.",8500); return; }
+  reply(rnd(["i'm a guardian, so i mostly talk safety! try: “I think I have a virus”, “scan everything”, or paste a link.",
+             "hmm, i didn't get that. you can say “check this link”, “scan my files”, or “I think I got hacked”."]),8000);
+}
+function sendChat(){ const v=$("chatIn").value; if(!v.trim()) return; $("chatIn").value=""; handleChat(v); }
+$("chatSend").addEventListener("click",sendChat);
+$("chatIn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.keyCode===13){ e.preventDefault(); sendChat(); } });
+
+/* ---------- pet taps & idle ---------- */
+let taps=0;
+$("pet").onclick=()=>{ if(scanning) return; taps++;
+  if(taps%3===0){ setMood("happy"); say(rnd(["hehe, that tickles!","shields at 100%!","reporting for duty!"]),3000); setTimeout(()=>setMood(""),3000); }
+  else tip(); };
+setInterval(()=>{ if(scanning||$("bubble").classList.contains("show")) return;
+  const r=Math.random();
+  if(S.lastScan && Date.now()-S.lastScan>7*864e5 && r<.3) say("it's been a while. want me to check your downloads?",6000);
+  else if(r<.15) say(rnd(["*on patrol*","all quiet on the screen.","i'm watching… only what you show me!","beep boop. guarding."]),3500);
+},22000);
+
+/* ---------- corner mode (floating picture-in-picture window) ---------- */
+let cmVid=null,cmCv=null,cmCtx=null,cmOn=false,cmWorker=null,cmTimer=null,cmOK=null;
+function cornerSupported(){ if(NATIVE) return false; if(cmOK!==null) return cmOK;
+  try{ const cv=document.createElement("canvas"),v=document.createElement("video");
+    cmOK=!!cv.captureStream&&!!(document.pictureInPictureEnabled||typeof v.webkitSetPresentationMode==="function"); }catch(e){ cmOK=false; }
+  return cmOK; }
+function rr(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+function cmDraw(){
+  if(!cmCtx) return;
+  try{
+    const c=cmCtx,W=256,t=performance.now()/1000,[cls,txt]=statusInfo();
+    const g=c.createLinearGradient(0,0,0,W);
+    if(cls==="danger"||redAlert){ g.addColorStop(0,"#FFD9DF"); g.addColorStop(1,"#FFE6D6"); } else { g.addColorStop(0,"#CFE3FF"); g.addColorStop(1,"#DDF7F1"); }
+    c.fillStyle=g; c.fillRect(0,0,W,W);
+    const bob=Math.sin(t*2)*4; c.save(); c.translate(128-100*0.82,34+bob); c.scale(.82,.82);
+    const red=cls==="danger"||redAlert, sg=c.createLinearGradient(0,26,60,190); sg.addColorStop(0,red?"#FF9AA8":"#6FB6FF"); sg.addColorStop(1,red?"#E0314F":"#2F6BFF");
+    c.strokeStyle="#5B8CFF"; c.lineWidth=5; c.lineCap="round"; c.beginPath(); c.moveTo(100,30); c.lineTo(100,13); c.stroke();
+    c.fillStyle=(cls==="danger"||redAlert)?"#FF7A8C":"#7FF6FF"; c.beginPath(); c.arc(100,10,7,0,Math.PI*2); c.fill();
+    c.fillStyle=sg; c.beginPath(); c.moveTo(100,26); c.bezierCurveTo(132,26,158,36,168,46); c.bezierCurveTo(171,112,150,160,100,190);
+    c.bezierCurveTo(50,160,29,112,32,46); c.bezierCurveTo(42,36,68,26,100,26); c.fill();
+    c.fillStyle="#14213D"; rr(c,50,72,100,46,23); c.fill();
+    const blink=(t%4.6)<.14, look=Math.sin(t*1.3)*4, eyeCol=(cls==="danger"||redAlert)?"#FFE3E8":"#7FF6FF";
+    c.fillStyle=eyeCol; [79,121].forEach(x=>{ c.beginPath(); c.ellipse(x+look,95,9,blink?1.5:11,0,0,Math.PI*2); c.fill(); });
+    c.strokeStyle="#14213D"; c.lineWidth=4.5; c.beginPath();
+    if(cls==="danger"){ c.moveTo(88,142); c.quadraticCurveTo(100,132,112,142); } else { c.moveTo(88,136); c.quadraticCurveTo(100,146,112,136); }
+    c.stroke(); c.restore();
+    c.fillStyle="rgba(255,255,255,.85)"; rr(c,10,212,236,34,14); c.fill();
+    c.fillStyle=cls==="danger"?"#E5445F":cls==="warn"?"#B96E08":"#1FA971"; c.beginPath(); c.arc(26,229,6,0,Math.PI*2); c.fill();
+    c.fillStyle="#14213D"; c.font="700 14px system-ui,sans-serif"; c.textAlign="left"; c.fillText((S.name||"Byte")+": "+txt,38,234);
+    if(lastLine.t && Date.now()-lastLine.at<Math.max(5000,lastLine.hold||0) && lastLine.hold<60000){
+      c.font="600 13px system-ui,sans-serif"; const words=lastLine.t.split(" "),lines=[]; let cur="";
+      for(const w of words){ const tl=cur?cur+" "+w:w; if(c.measureText(tl).width>210){ lines.push(cur); cur=w; if(lines.length===2) break; } else cur=tl; }
+      if(lines.length<2&&cur) lines.push(cur);
+      c.fillStyle="rgba(255,255,255,.95)"; rr(c,10,8,236,14+lines.length*17,12); c.fill();
+      c.fillStyle="#14213D"; lines.forEach((l,i)=>c.fillText(l,20,27+i*17));
+    }
+  }catch(e){}
+}
+function cmStart(){ cmStop(); try{ const src="let i;onmessage=e=>{clearInterval(i);if(e.data)i=setInterval(()=>postMessage(0),e.data)}";
+  cmWorker=new Worker(URL.createObjectURL(new Blob([src],{type:"text/javascript"}))); cmWorker.onmessage=cmDraw; cmWorker.postMessage(90); }catch(e){ cmTimer=setInterval(cmDraw,90); } }
+function cmStop(){ if(cmWorker){ try{cmWorker.terminate();}catch(e){} cmWorker=null; } clearInterval(cmTimer); cmTimer=null; }
+async function startCorner(){
+  if(cmOn) return;
+  if(!cornerSupported()){ say("this device won't let me float in a corner, so i'll stay right here!",5000); return; }
+  if(!cmCv){ cmCv=document.createElement("canvas"); cmCv.width=256; cmCv.height=256; cmCtx=cmCv.getContext("2d"); }
+  cmDraw();
+  if(!cmVid){
+    cmVid=document.createElement("video"); cmVid.muted=true; cmVid.playsInline=true; cmVid.setAttribute("playsinline","");
+    cmVid.style.cssText="position:fixed;left:0;bottom:0;width:4px;height:4px;opacity:.01;pointer-events:none;z-index:-1";
+    document.body.appendChild(cmVid);
+    cmVid.addEventListener("leavepictureinpicture",cornerClosed);
+    cmVid.addEventListener("webkitpresentationmodechanged",()=>{ if(cmVid.webkitPresentationMode!=="picture-in-picture"&&cmOn) cornerClosed(); });
+  }
+  cmVid.srcObject=cmCv.captureStream(12); cmStart();
+  try{
+    await cmVid.play();
+    if(document.pictureInPictureEnabled&&cmVid.requestPictureInPicture) await cmVid.requestPictureInPicture();
+    else cmVid.webkitSetPresentationMode("picture-in-picture");
+    cmOn=true; draw();
+    if("mediaSession" in navigator){ try{ navigator.mediaSession.metadata=new MediaMetadata({title:S.name||"Byte",artist:"standing guard",
+      artwork:[{src:"icon-192.png",sizes:"192x192",type:"image/png"}]});
+      navigator.mediaSession.setActionHandler("pause",()=>say("still on guard!",2500)); }catch(e){} }
+    say("standing guard in the corner! close my window to bring me back.",6000);
+  }catch(e){ cmStop(); say("the corner didn't open. tap 📌 to try again.",4500); }
+}
+function stopCorner(){ try{ if(document.pictureInPictureElement) document.exitPictureInPicture().catch(()=>{});
+  else if(cmVid&&cmVid.webkitPresentationMode==="picture-in-picture") cmVid.webkitSetPresentationMode("inline"); }catch(e){} cornerClosed(); }
+function cornerClosed(){ if(!cmOn) return; cmOn=false; cmStop();
+  try{ if(cmVid){ cmVid.pause(); if(cmVid.srcObject) cmVid.srcObject.getTracks().forEach(t=>t.stop()); cmVid.srcObject=null; } }catch(e){}
+  draw(); setTimeout(()=>say("back inside. all quiet!",3000),300); }
+function syncCornerBtn(){ const b=$("bCorner"); b.classList.toggle("hidden",!cornerSupported()||!S.name); b.classList.toggle("on",cmOn); b.textContent=cmOn?"🏠":"📌";
+  b.setAttribute("aria-label",cmOn?"Bring your guardian home":"Let your guardian stand guard in the corner"); }
+function askCorner(force){ if(!force&&S.corner) return; if(!cornerSupported()){ if(force) say("this device can't show floating windows, sorry!"); return; }
+  const n=S.name||"Byte"; $("cTitle").textContent="Can "+n+" stand guard in your corner?";
+  $("cText").textContent=n+" would like to float in a small window on top of your other apps and show your safety status. It still only checks files and links you give it.";
+  show("vCorner"); }
+$("cYes").onclick=()=>{ S.corner="yes"; save(); hide("vCorner"); startCorner(); };
+$("cNo").onclick=()=>{ S.corner="no"; save(); hide("vCorner"); say("okay! tap 📌 if you change your mind."); };
+$("bCorner").onclick=()=>{ if(cmOn) stopCorner(); else if(S.corner==="yes") startCorner(); else askCorner(true); };
+
+/* ---------- install ---------- */
+let instEvt=null;
+const IS_IOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+const IS_APP=matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); instEvt=e; syncGetBtn(); });
+addEventListener("appinstalled",()=>{ instEvt=null; say("i have my own app icon now!"); syncGetBtn(); });
+function syncGetBtn(){ $("bGet").classList.toggle("hidden",IS_APP||NATIVE||!S.name); }
+function instHTML(){
+  if(IS_APP) return "<p>Installed! You're using the app version.</p>";
+  if(instEvt) return '<button class="go" id="instGo">Install Guard Pal</button>';
+  return IS_IOS
+    ? '<ol class="steps"><li>Open this page in <b>Safari</b></li><li>Tap <b>Share</b> (or ≡ then Share)</li><li>Tap <b>Add to Home Screen</b></li><li>Turn on <b>Open as Web App</b>, then tap <b>Add</b></li></ol>'
+    : '<ol class="steps"><li>Open this page in <b>Chrome</b></li><li>Tap the <b>⋮</b> menu</li><li>Tap <b>Install app</b> or <b>Add to Home screen</b></li></ol>';
+}
+async function doInstall(){ if(!instEvt) return false; instEvt.prompt(); try{ await instEvt.userChoice; }catch(e){} instEvt=null; syncGetBtn(); return true; }
+$("bGet").onclick=async()=>{ if(!(await doInstall())){ openSettings(); setTimeout(()=>$("instBox").scrollIntoView({behavior:"smooth",block:"center"}),250); } };
+
+/* ---------- settings ---------- */
+function openSettings(){
+  if(NATIVE){ $("rtBox").classList.remove("hidden"); $("setRT").checked=GuardNative.guardOn(); }
+  $("setCorner").checked=S.corner==="yes";
+  const ok=cornerSupported(); $("cornerRow").classList.toggle("hidden",!ok); $("cornerGo").classList.toggle("hidden",!ok);
+  $("cornerGo").textContent=cmOn?"Bring "+(S.name||"Byte")+" home":"Send to the corner";
+  if(!ok) $("cornerNote").textContent="This device or browser can't show floating windows. Try Chrome on Android or Safari on iPhone.";
+  renderFolders();
+  $("instBox").innerHTML=instHTML(); const ig=$("instGo"); if(ig) ig.onclick=doInstall;
+  show("vSet");
+}
+$("bGear").onclick=openSettings;
+$("setCorner").onchange=e=>{ S.corner=e.target.checked?"yes":"no"; save(); if(!e.target.checked&&cmOn) stopCorner(); draw(); };
+$("cornerGo").onclick=()=>{ if(cmOn){ stopCorner(); hide("vSet"); return; } S.corner="yes"; save(); hide("vSet"); startCorner(); };
+$("byeGo").onclick=()=>{
+  const n=S.name||"Byte";
+  if(!confirm("Say goodbye to "+n+"?\n\n"+n+" and its history will be removed from this device. This can't be undone.")) return;
+  hide("vSet"); if(cmOn) stopCorner(); setMood("happy"); say("bye! stay safe out there 💙",2600);
+  setTimeout(()=>{ window.__bye=true; clearTimeout(saveT); try{ localStorage.removeItem(KEY); }catch(e){} try{ indexedDB.deleteDatabase("guardpal"); }catch(e){} location.reload(); },2500);
+};
+
+/* ---------- hatch & boot ---------- */
+function hatch(){
+  if(NATIVE) setTimeout(()=>openAsk("rt"),13000);
+  S.name=($("nameIn").value.trim()||"Byte").slice(0,14); S.born=Date.now(); save(); hide("vHatch"); draw();
+  setMood("happy"); say("hi! i'm "+S.name+", your guardian. i only check what you show me.",5500);
+  setTimeout(()=>{ setMood(""); say("tap 🔍 Scan files to check your downloads, or 🔗 to check a link from a message.",7000); },5800);
+  setTimeout(()=>askCorner(false),13500);
+}
+$("hatchGo").onclick=hatch;
+$("nameIn").addEventListener("keydown",e=>{ if(e.key==="Enter") hatch(); });
+const saved=load();
+if(saved&&saved.name){
+  S=saved; hide("vHatch"); draw();
+  const [cls]=statusInfo(); if(cls==="danger") setMood("alert");
+  setTimeout(()=>say(S.lastScan&&Date.now()-S.lastScan<864e5?rnd(["welcome back!","hi again! all quiet here."]):"welcome back! want me to check something?",4000),600);
+  if(!S.corner) setTimeout(()=>askCorner(false),9000);
+} else { draw(); setTimeout(()=>$("nameIn").focus(),300); }
+setInterval(draw,60000);
+if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0) navigator.serviceWorker.register("sw.js").catch(()=>{});
+})();
+</script>
+</body>
+</html>

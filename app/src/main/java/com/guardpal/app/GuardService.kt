@@ -54,11 +54,20 @@ class GuardService : Service() {
         }
     }
 
+    private fun saveStatus(result: String) {
+        prefs(this).edit().putString("lastResult", result).putLong("lastScan", System.currentTimeMillis()).apply()
+        try { GuardWidget.refreshAll(this) } catch (e: Exception) {}
+    }
+
     private val handler = Handler(Looper.getMainLooper())
+    private fun intervalMs(): Long {
+        val hrs = prefs(this).getInt("scanEveryHours", 24)
+        return hrs.coerceIn(1, 168) * 60L * 60L * 1000L
+    }
     private val periodic = object : Runnable {
         override fun run() {
             Thread { recheckAll() }.start()
-            handler.postDelayed(this, 6L * 60 * 60 * 1000)
+            handler.postDelayed(this, intervalMs())
         }
     }
 
@@ -95,7 +104,7 @@ class GuardService : Service() {
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(packageWatcher, f, Context.RECEIVER_EXPORTED)
         else registerReceiver(packageWatcher, f)
         running = true
-        handler.postDelayed(periodic, 60_000)
+        handler.postDelayed(periodic, 60_000)  // first check a minute after boot
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -113,9 +122,9 @@ class GuardService : Service() {
         val why = r.optJSONArray("why")
         val first = if (why != null && why.length() > 0) why.getString(0) else ""
         when (r.optString("level")) {
-            "danger" -> alert(pkg, "🚨 Dangerous app ${if (updated) "updated" else "installed"}: $name",
-                "Byte says: $first. Tap to deal with it now.", true)
-            "warn" -> alert(pkg, "⚠️ $name needs care", "Byte says: $first.", true)
+            "danger" -> { saveStatus("danger"); alert(pkg, "🚨 Dangerous app ${if (updated) "updated" else "installed"}: $name",
+                "Byte says: $first. Tap to remove it now.", true) }
+            "warn" -> { saveStatus("warn"); alert(pkg, "⚠️ $name needs care", "Byte says: $first.", true) }
             else -> if (!updated) alert(pkg, "✅ Byte checked $name", "No danger signs found.", false)
         }
     }
@@ -136,6 +145,9 @@ class GuardService : Service() {
                 alert(a.getString("pkg"), "🚨 Byte found a dangerous app: ${a.optString("name")}",
                     "Byte says: ${if (why != null && why.length() > 0) why.getString(0) else "danger signs found"}.", true)
             }
+            var worst = "safe"
+            for (i in 0 until apps.length()) { val lv = apps.getJSONObject(i).optString("level"); if (lv=="danger") { worst="danger"; break } else if (lv=="warn") worst="warn" }
+            saveStatus(worst)
             prefs(this).edit().putStringSet("warned", seen).apply()
         } catch (e: Exception) { }
     }

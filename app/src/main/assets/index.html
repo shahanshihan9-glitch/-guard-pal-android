@@ -320,9 +320,21 @@ details.safe summary{cursor:pointer;font-weight:600;padding:8px 0}
       <button class="go ghost" id="gfAdd">Add a folder</button>
     </div>
     <div id="rtBox" class="hidden">
-      <h3>🛡️ Real-time protection</h3>
-      <p>Byte checks every new app the moment it's installed and re-checks all apps every few hours. Android shows a small "Byte is on guard" notification while it's on.</p>
-      <label class="toggle"><span>Protect my phone all the time</span><input type="checkbox" id="setRT"></label>
+      <h3>🛡️ Watchful protection</h3>
+      <p>Byte watches quietly. He checks each new app the moment it's installed and sends a notification alert if something looks off. He also runs an occasional full check on the schedule below. He always asks before the first scan.</p>
+      <label class="toggle"><span>Let Byte watch over my phone</span><input type="checkbox" id="setRT"></label>
+      <div class="setrow" style="justify-content:space-between;padding:10px 0"><span>Occasional full scan</span>
+        <select id="setEvery" style="border:2px solid var(--line);border-radius:10px;padding:8px;background:var(--bg)">
+          <option value="12">Twice a day</option><option value="24" selected>Once a day</option>
+          <option value="72">Every 3 days</option><option value="168">Once a week</option></select></div>
+      <div class="divider"></div>
+      <h3>🖼️ Byte on your wallpaper</h3>
+      <p>Set a live wallpaper of Byte on your home screen. It glows calm blue when you're safe and turns red if a threat is found. Android asks you to confirm. (A wallpaper can't take taps, so use the widget below to scan or ask.)</p>
+      <button class="go ghost" id="setWall">🖼️ Use Byte as my wallpaper</button>
+      <div class="divider"></div>
+      <h3>🔲 Home-screen widget</h3>
+      <p>Add a Byte widget to your home screen showing your safety status. Tap it anytime to open Guard Pal and scan.</p>
+      <button class="go ghost" id="setWidget">➕ Add the widget</button>
     </div>
     <h3>📌 Corner mode</h3>
     <p id="cornerNote">Let your guardian float in a small window on top of your other apps. Close its window anytime to bring it home.</p>
@@ -1103,7 +1115,12 @@ $("resBody").addEventListener("click",e=>{
       if(lastNative&&lastNative.files) lastNative.files.files=lastNative.files.files.filter(x=>x.path!==del.dataset.del); }
     else toast("couldn't delete it. try from your Files app."); }
 });
-$("setRT").onchange=e=>{ GuardNative.setGuard(e.target.checked); setTimeout(draw,700); say(e.target.checked?"on guard! 🛡️":"okay, real-time protection is off. i'm still here for manual scans.",4000); };
+$("setRT").onchange=e=>{ GuardNative.setGuard(e.target.checked); setTimeout(draw,700); say(e.target.checked?"i'm watching over you now. 🛡️":"okay, i've stopped watching. you can still scan anytime.",4000); };
+if(NATIVE){
+  $("setEvery").onchange=e=>{ GuardNative.setScanInterval(parseInt(e.target.value,10)); toast("Byte will do a full check "+({12:"twice a day",24:"once a day",72:"every 3 days",168:"once a week"}[e.target.value]||"regularly")); };
+  $("setWall").onclick=()=>{ GuardNative.setWallpaper(); say("pick “Guard Pal” and tap Set wallpaper. i'll glow red if i ever spot a threat.",6000); };
+  $("setWidget").onclick=()=>{ GuardNative.addWidget(); };
+}
 if(NATIVE){
   $("dScan").onclick=()=>openAsk("files");
   document.title="Guard Pal";
@@ -1265,7 +1282,8 @@ $("bGet").onclick=async()=>{ if(!(await doInstall())){ openSettings(); setTimeou
 
 /* ---------- settings ---------- */
 function openSettings(){
-  if(NATIVE){ $("rtBox").classList.remove("hidden"); $("setRT").checked=GuardNative.guardOn(); }
+  if(NATIVE){ $("rtBox").classList.remove("hidden"); $("setRT").checked=GuardNative.guardOn();
+    try{ $("setEvery").value=String(GuardNative.getScanInterval()); }catch(e){} }
   $("setCorner").checked=S.corner==="yes";
   const ok=cornerSupported(); $("cornerRow").classList.toggle("hidden",!ok); $("cornerGo").classList.toggle("hidden",!ok);
   $("cornerGo").textContent=cmOn?"Bring "+(S.name||"Byte")+" home":"Send to the corner";
@@ -1286,7 +1304,7 @@ $("byeGo").onclick=()=>{
 
 /* ---------- hatch & boot ---------- */
 function hatch(){
-  if(NATIVE) setTimeout(()=>openAsk("rt"),13000);
+  if(NATIVE){ try{ GuardNative.saveName(($("nameIn").value.trim()||"Byte")); }catch(e){} setTimeout(()=>openAsk("rt"),13000); }
   S.name=($("nameIn").value.trim()||"Byte").slice(0,14); S.born=Date.now(); save(); hide("vHatch"); draw();
   setMood("happy"); say("hi! i'm "+S.name+", your guardian. i only check what you show me.",5500);
   setTimeout(()=>{ setMood(""); say("tap 🔍 Scan files to check your downloads, or 🔗 to check a link from a message.",7000); },5800);

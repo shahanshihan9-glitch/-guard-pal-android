@@ -54,4 +54,32 @@ class Bridge(private val act: MainActivity, private val web: WebView) {
     @JavascriptInterface fun setGuard(on: Boolean) {
         main.post { if (on) { act.askNotifications(); GuardService.start(act) } else GuardService.stop(act) }
     }
+
+    @JavascriptInterface fun setWallpaper() {
+        main.post {
+            try {
+                val i = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                i.putExtra(android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                    android.content.ComponentName(act, GuardWallpaper::class.java))
+                act.safeStart(i)
+            } catch (e: Exception) {
+                try { act.safeStart(android.content.Intent(android.app.WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) } catch (e2: Exception) {}
+            }
+        }
+    }
+    @JavascriptInterface fun addWidget() {
+        main.post {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    val mgr = act.getSystemService(android.appwidget.AppWidgetManager::class.java)
+                    val prov = android.content.ComponentName(act, GuardWidget::class.java)
+                    if (mgr != null && mgr.isRequestPinAppWidgetSupported) { mgr.requestPinAppWidget(prov, null, null); return@post }
+                }
+                android.widget.Toast.makeText(act, "Long-press your home screen, tap Widgets, and add Guard Pal.", android.widget.Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {}
+        }
+    }
+    @JavascriptInterface fun setScanInterval(hours: Int) { GuardService.prefs(act).edit().putInt("scanEveryHours", hours).apply() }
+    @JavascriptInterface fun getScanInterval(): Int = GuardService.prefs(act).getInt("scanEveryHours", 24)
+    @JavascriptInterface fun saveName(name: String) { GuardService.prefs(act).edit().putString("name", name).apply() }
 }
